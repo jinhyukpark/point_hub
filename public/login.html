@@ -84,6 +84,7 @@
             margin-bottom: calc(40px * var(--scale-factor));
             width: var(--input-width);
             height: var(--input-height);
+            z-index: 5;
         }
 
         .input-label {
@@ -107,13 +108,17 @@
             border-image-width: calc(25px * var(--scale-factor));
             border-image-outset: 0;
             border-image-repeat: stretch;
-            background: transparent;
-            color: #ffffff;
+            background: transparent !important;
+            color: #ffffff !important;
             font-size: calc(44px * var(--scale-factor));
             padding: calc(80px * var(--scale-factor)) calc(40px * var(--scale-factor)) calc(40px * var(--scale-factor)) calc(40px * var(--scale-factor));
             outline: none;
             font-family: 'Merriweather', serif;
             transition: filter 0.3s ease;
+            position: relative;
+            z-index: 100;
+            cursor: text;
+            pointer-events: auto !important;
         }
 
         .input-field.password {
@@ -268,12 +273,12 @@
             
             <div class="input-container">
                 <label class="input-label" for="email">E-MAIL</label>
-                <input type="email" id="email" class="input-field" required>
+                <input type="email" id="email" class="input-field" autocomplete="off" required>
             </div>
-            
+
             <div class="input-container">
                 <label class="input-label" for="password">PASSWORD</label>
-                <input type="password" id="password" class="input-field password" required>
+                <input type="password" id="password" class="input-field password" autocomplete="new-password" required>
             </div>
             
             <button type="button" id="loginBtn" class="login-button"></button>
@@ -293,6 +298,18 @@
             const loginBtn = document.getElementById('loginBtn');
             const errorMessage = document.getElementById('errorMessage');
             const loading = document.getElementById('loading');
+
+            // Fix autofill blocking input - remove readonly after page load
+            emailInput.removeAttribute('readonly');
+            passwordInput.removeAttribute('readonly');
+
+            // Ensure inputs are focusable
+            setTimeout(() => {
+                emailInput.style.pointerEvents = 'auto';
+                passwordInput.style.pointerEvents = 'auto';
+                emailInput.removeAttribute('readonly');
+                passwordInput.removeAttribute('readonly');
+            }, 100);
 
             // Handle login button click
             loginBtn.addEventListener('click', handleLogin);
@@ -377,42 +394,46 @@
 
             // Test Firebase Functions
             async function testFunctions(user) {
-                console.log('Testing Firebase Functions...');
-                
+                console.log('Checking user profile...');
+
                 try {
-                    // Test createUserProfile
-                    const createUserProfile = window.httpsCallable(window.firebaseFunctions, 'createUserProfile');
-                    const profileResult = await createUserProfile({
-                        uid: user.uid,
-                        email: user.email
-                    });
-                    console.log('createUserProfile result:', profileResult.data);
-                    
-                    // Test initializeSystem
-                    const initializeSystem = window.httpsCallable(window.firebaseFunctions, 'initializeSystem');
-                    const systemResult = await initializeSystem({});
-                    console.log('initializeSystem result:', systemResult.data);
-                    
-                    // Check user data in database
+                    // Check if user data already exists
                     const userRef = window.dbRef(window.firebaseDatabase, `users/${user.uid}`);
                     const userSnapshot = await window.dbGet(userRef);
+
                     if (userSnapshot.exists()) {
-                        console.log('User data:', userSnapshot.val());
+                        console.log('✅ User data exists:', userSnapshot.val());
                     } else {
-                        console.log('No user data found');
+                        console.log('⚠️ No user data found, creating profile...');
+
+                        // Create user profile only if it doesn't exist
+                        const createUserProfile = window.httpsCallable(window.firebaseFunctions, 'createUserProfile');
+                        const profileResult = await createUserProfile({
+                            uid: user.uid,
+                            email: user.email
+                        });
+                        console.log('✅ createUserProfile result:', profileResult.data);
+
+                        // Re-check user data
+                        const newSnapshot = await window.dbGet(userRef);
+                        if (newSnapshot.exists()) {
+                            console.log('✅ User data created:', newSnapshot.val());
+                        }
                     }
-                    
-                    // Check oracle data
+
+                    // Test initializeSystem (only once)
                     const oracleRef = window.dbRef(window.firebaseDatabase, 'oracle/current');
                     const oracleSnapshot = await window.dbGet(oracleRef);
-                    if (oracleSnapshot.exists()) {
-                        console.log('Oracle data:', oracleSnapshot.val());
-                    } else {
-                        console.log('No oracle data found');
+                    if (!oracleSnapshot.exists()) {
+                        console.log('Initializing system...');
+                        const initializeSystem = window.httpsCallable(window.firebaseFunctions, 'initializeSystem');
+                        const systemResult = await initializeSystem({});
+                        console.log('initializeSystem result:', systemResult.data);
                     }
-                    
+
+
                 } catch (error) {
-                    console.error('Function test error:', error);
+                    console.error('❌ Profile check error:', error);
                 }
             }
 

@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wallet Migration Admin</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 5px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button.secondary {
+            background: #2196F3;
+        }
+        button.secondary:hover {
+            background: #0b7dda;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        .loading {
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Wallet Migration Admin</h1>
+
+        <div class="section">
+            <h2>1. Check Current User Wallet</h2>
+            <p>현재 로그인한 사용자의 지갑 구조를 확인합니다.</p>
+            <button onclick="checkCurrentWallet()">Check My Wallet</button>
+            <div id="walletStatus" class="status" style="display:none;"></div>
+        </div>
+
+        <div class="section">
+            <h2>2. Fix Current User Wallet</h2>
+            <p>현재 사용자의 지갑을 수동으로 10,000 USDT로 설정합니다.</p>
+            <button onclick="fixCurrentUserWallet()" class="secondary">Fix My Wallet (10,000 USDT)</button>
+            <div id="fixStatus" class="status" style="display:none;"></div>
+        </div>
+
+        <div class="section">
+            <h2>3. Migrate All Users</h2>
+            <p>모든 사용자의 지갑 구조를 마이그레이션합니다 (관리자 전용).</p>
+            <button onclick="migrateAllWallets()">Migrate All Users</button>
+            <div id="migrateStatus" class="status" style="display:none;"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
+        import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
+        import { getDatabase, ref, get, set } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js';
+        import { getFunctions, httpsCallable, connectFunctionsEmulator } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-functions.js';
+
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyDH_zFxC8W3PGIH-hS9MQvfMqZi-vKiBkE",
+            authDomain: "pointhub-fedd1.firebaseapp.com",
+            databaseURL: "https://pointhub-fedd1-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "pointhub-fedd1",
+            storageBucket: "pointhub-fedd1.firebasestorage.app",
+            messagingSenderId: "452642550134",
+            appId: "1:452642550134:web:adfe5a46d9b8cf48e66ea0",
+            measurementId: "G-8RFPBECKMM"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const database = getDatabase(app);
+        const functions = getFunctions(app);
+
+        // Connect to emulator if running locally
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            connectFunctionsEmulator(functions, '127.0.0.1', 5001);
+        }
+
+        let currentUser = null;
+
+        onAuthStateChanged(auth, (user) => {
+            currentUser = user;
+            if (user) {
+                console.log('✅ Logged in as:', user.email);
+            } else {
+                console.log('❌ Not logged in');
+                alert('Please login first at /login.html');
+            }
+        });
+
+        // Global functions
+        window.checkCurrentWallet = async function() {
+            const statusDiv = document.getElementById('walletStatus');
+            statusDiv.style.display = 'block';
+            statusDiv.className = 'status loading';
+            statusDiv.textContent = 'Checking wallet...';
+
+            try {
+                if (!currentUser) {
+                    throw new Error('Not logged in');
+                }
+
+                const userRef = ref(database, `/users/${currentUser.uid}`);
+                const snapshot = await get(userRef);
+
+                if (!snapshot.exists()) {
+                    throw new Error('User data not found');
+                }
+
+                const userData = snapshot.val();
+                const result = {
+                    uid: currentUser.uid,
+                    email: userData.email,
+                    balance: userData.balance || 'NOT SET',
+                    wallet: userData.wallet || 'NOT SET',
+                    'wallet.usdt': userData.wallet?.usdt || 'NOT SET'
+                };
+
+                statusDiv.className = 'status info';
+                statusDiv.textContent = JSON.stringify(result, null, 2);
+
+            } catch (error) {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = `Error: ${error.message}`;
+                console.error(error);
+            }
+        };
+
+        window.fixCurrentUserWallet = async function() {
+            const statusDiv = document.getElementById('fixStatus');
+            statusDiv.style.display = 'block';
+            statusDiv.className = 'status loading';
+            statusDiv.textContent = 'Fixing wallet...';
+
+            try {
+                if (!currentUser) {
+                    throw new Error('Not logged in');
+                }
+
+                const updates = {};
+                updates[`/users/${currentUser.uid}/wallet/usdt`] = 10000;
+                updates[`/users/${currentUser.uid}/balance`] = 10000;
+
+                const dbRef = ref(database);
+                await set(ref(database, `/users/${currentUser.uid}/wallet`), { usdt: 10000 });
+                await set(ref(database, `/users/${currentUser.uid}/balance`), 10000);
+
+                // Verify the update
+                const userRef = ref(database, `/users/${currentUser.uid}`);
+                const snapshot = await get(userRef);
+                const userData = snapshot.val();
+
+                statusDiv.className = 'status success';
+                statusDiv.textContent = `✅ Wallet fixed successfully!\n\nUser: ${currentUser.uid}\nBalance: ${userData.balance}\nWallet USDT: ${userData.wallet?.usdt}\n\nYou can now try betting in the cube game.`;
+
+            } catch (error) {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = `❌ Error: ${error.message}`;
+                console.error(error);
+            }
+        };
+
+        window.migrateAllWallets = async function() {
+            const statusDiv = document.getElementById('migrateStatus');
+            statusDiv.style.display = 'block';
+            statusDiv.className = 'status loading';
+            statusDiv.textContent = 'Migrating all users...';
+
+            try {
+                if (!currentUser) {
+                    throw new Error('Not logged in');
+                }
+
+                const migrateFunction = httpsCallable(functions, 'testMigrateUserWallets');
+                const result = await migrateFunction();
+
+                statusDiv.className = 'status success';
+                statusDiv.textContent = `✅ Migration completed!\n\n${JSON.stringify(result.data, null, 2)}`;
+
+            } catch (error) {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = `❌ Error: ${error.message}\n\n${error.stack || ''}`;
+                console.error(error);
+            }
+        };
+    </script>
+</body>
+</html>

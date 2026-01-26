@@ -9,15 +9,45 @@
 
 (function() {
   'use strict';
-  
+
+  // 환경 자동 감지 (localhost = 개발, 그 외 = production)
+  const isLocalhost = window.location.hostname === 'localhost' ||
+                      window.location.hostname === '127.0.0.1' ||
+                      window.location.hostname === '[::1]';
+
+  // Production database URL
+  const productionDatabaseURL = "https://pointhub-ab054-default-rtdb.asia-southeast1.firebasedatabase.app";
+
+  // Local emulator database URL
+  const localDatabaseURL = "http://127.0.0.1:9000?ns=pointhub-ab054";
+
+  // 환경에 따라 자동으로 databaseURL 선택
   window.firebaseConfig = {
-  "apiKey": "AIzaSyBL5OqOOM7Dr68dwiiqPta_0H_WcLnfK4Q",
-  "authDomain": "pointhub-ab054.firebaseapp.com",
-  "databaseURL": "https://pointhub-ab054-default-rtdb.asia-southeast1.firebasedatabase.app",
-  "projectId": "pointhub-ab054",
-  "storageBucket": "pointhub-ab054.firebasestorage.app",
-  "messagingSenderId": "357350284675",
-  "appId": "1:357350284675:web:2004ea07513e63d0dc6ab6",
-  "measurementId": ""
-};
+    "apiKey": "AIzaSyBL5OqOOM7Dr68dwiiqPta_0H_WcLnfK4Q",
+    "authDomain": "pointhub-ab054.firebaseapp.com",
+    "databaseURL": isLocalhost ? localDatabaseURL : productionDatabaseURL,
+    "projectId": "pointhub-ab054",
+    "storageBucket": "pointhub-ab054.firebasestorage.app",
+    "messagingSenderId": "357350284675",
+    "appId": "1:357350284675:web:2004ea07513e63d0dc6ab6",
+    "measurementId": ""
+  };
+
+  // Enable Firebase Emulators for local development only
+  window.useEmulators = isLocalhost;
+  window.emulatorConfig = isLocalhost ? {
+    auth: {
+      host: 'localhost',
+      port: 9099
+    },
+    database: {
+      host: 'localhost',
+      port: 9000
+    },
+    functions: {
+      host: 'localhost',
+      port: 5001
+    }
+  } : null;
+
 })();
