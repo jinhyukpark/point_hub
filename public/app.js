@@ -518,12 +518,34 @@ class PointHubApp {
         // Reference to user data
         this.userDataRef = window.firebaseRef(window.firebaseDatabase, `/users/${this.currentUser.uid}`);
 
+        // 사용자 프로필 확인 타임아웃 (10초)
+        // createUserProfile Cloud Function이 완료될 시간을 줌
+        const PROFILE_CHECK_TIMEOUT_MS = 10000;
+        this.userDataReceived = false;
+
+        // 타임아웃 설정 - 10초 후에도 프로필이 없으면 로그아웃
+        this.profileCheckTimeout = setTimeout(() => {
+            if (!this.userDataReceived) {
+                console.error('❌ User profile not found after timeout. Logging out...');
+                this.forceLogoutDueToMissingProfile();
+            }
+        }, PROFILE_CHECK_TIMEOUT_MS);
+
         // Listen for real-time updates
         window.firebaseOnValue(this.userDataRef, (snapshot) => {
             const userData = snapshot.val();
             console.log('📥 Raw user data from Firebase:', userData);
 
             if (userData) {
+                // 사용자 데이터 존재 - 정상 처리
+                this.userDataReceived = true;
+
+                // 타임아웃 해제
+                if (this.profileCheckTimeout) {
+                    clearTimeout(this.profileCheckTimeout);
+                    this.profileCheckTimeout = null;
+                }
+
                 console.log('📈 User data updated:', userData);
 
                 // Add auth info to user data
@@ -548,14 +570,50 @@ class PointHubApp {
                     console.log('📦 Pending data stored:', this.pendingUserData);
                 }
             } else {
-                console.warn('⚠️ No user data found in Firebase!');
+                console.warn('⚠️ No user data found in Firebase! Waiting for profile creation...');
+                // 타임아웃이 처리하므로 여기서는 대기만 함
+                // createUserProfile이 완료되면 onValue가 다시 호출됨
             }
         });
 
         this.startHistorySubscription('auth-state');
     }
 
+    // 프로필 누락으로 인한 강제 로그아웃
+    async forceLogoutDueToMissingProfile() {
+        console.error('🚫 Force logout: User profile missing in database');
+
+        // 타임아웃 정리
+        if (this.profileCheckTimeout) {
+            clearTimeout(this.profileCheckTimeout);
+            this.profileCheckTimeout = null;
+        }
+
+        // 리스너 정리
+        this.stopUserDataSync();
+
+        // 사용자에게 알림
+        alert('회원 정보를 찾을 수 없습니다. 다시 회원가입해 주세요.\n\nUser profile not found. Please sign up again.');
+
+        try {
+            // Firebase Auth 로그아웃
+            await window.signOut(window.firebaseAuth);
+            console.log('✅ User signed out due to missing profile');
+        } catch (error) {
+            console.error('❌ Error during force logout:', error);
+        }
+
+        // 로그인 페이지로 리다이렉트
+        window.location.href = '/login.html';
+    }
+
     stopUserDataSync() {
+        // 프로필 체크 타임아웃 정리
+        if (this.profileCheckTimeout) {
+            clearTimeout(this.profileCheckTimeout);
+            this.profileCheckTimeout = null;
+        }
+
         if (this.userDataRef) {
             window.firebaseOff(this.userDataRef);
             this.userDataRef = null;

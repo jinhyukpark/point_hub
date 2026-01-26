@@ -5,7 +5,7 @@
 # Run this in background: ./scripts/game-scheduler.sh &
 
 EMULATOR_URL="http://127.0.0.1:9000"
-DB_NS="pointhub-ab054"
+DB_NS="point-hub-a9db1"
 CHECK_INTERVAL=300  # 5분마다 체크
 
 echo "🎮 PointHub Game Scheduler Started"
@@ -30,7 +30,7 @@ check_and_create_games() {
 
         # 정산 먼저 실행 (오래된 게임 삭제 전)
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] 💰 Settling expired games..."
-        SETTLE_RESULT=$(curl -s -X POST "http://127.0.0.1:5001/pointhub-ab054/us-central1/settleMatchingGamesHttp" 2>&1)
+        SETTLE_RESULT=$(curl -s -X POST "http://127.0.0.1:5001/point-hub-a9db1/us-central1/settleMatchingGamesHttp" 2>&1)
         if echo "$SETTLE_RESULT" | grep -q "success.*true"; then
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] ✅ Settlement completed successfully"
         else

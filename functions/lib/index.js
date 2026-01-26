@@ -126,7 +126,7 @@ exports.createUserProfile = (0, https_1.onCall)(async (request) => {
     const now = Date.now();
     // 로컬 에뮬레이터 환경인지 확인
     const isEmulator = process.env.FUNCTIONS_EMULATOR === 'true' ||
-        process.env.FIREBASE_DATABASE_EMULATOR_HOST;
+        !!process.env.FIREBASE_DATABASE_EMULATOR_HOST;
     // 기본 100 USDT 지급 (로컬 환경에서는 10000)
     const initialBalance = isEmulator ? 10000 : 100;
     // 사용자 프로필 초기화 (wallet 구조 사용)

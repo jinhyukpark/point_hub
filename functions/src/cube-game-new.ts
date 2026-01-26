@@ -8,7 +8,7 @@ import { formatCubeHistory } from './history-formatter';
 
 const CUBE_SETTLEMENT_DELAY_MS = 4.5 * 60 * 1000;
 const MAX_CUBE_POSITIONS = 2047;
-const PROJECT_ID = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || process.env.PROJECT_ID || 'pointhub-ab054';
+const PROJECT_ID = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || process.env.PROJECT_ID || 'point-hub-a9db1';
 const CUBE_TASK_REGION = process.env.CUBE_TASK_REGION || 'asia-northeast3';
 const CUBE_SETTLEMENT_FUNCTION_NAME = process.env.CUBE_SETTLEMENT_FUNCTION_NAME || 'cubeGameSettlementWorker';
 const CUBE_TASK_TARGET = process.env.CUBE_TASK_TARGET

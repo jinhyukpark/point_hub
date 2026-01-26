@@ -9,16 +9,14 @@ if (admin.apps.length === 0) {
   if (useEmulator) {
     // Use emulator in local development
     admin.initializeApp({
-      projectId: 'pointhub-ab054',
-      databaseURL: 'http://127.0.0.1:9000?ns=pointhub-ab054'
+      projectId: 'point-hub-a9db1',
+      databaseURL: 'http://127.0.0.1:9000?ns=point-hub-a9db1'
     });
     console.log('[Firebase Admin] Using Database Emulator at http://127.0.0.1:9000');
   } else {
-    // Use production DB
-    admin.initializeApp({
-      databaseURL: 'https://pointhub-ab054-default-rtdb.asia-southeast1.firebasedatabase.app'
-    });
-    console.log('[Firebase Admin] Using Production Database');
+    // Use production - let Firebase auto-configure with default credentials
+    admin.initializeApp();
+    console.log('[Firebase Admin] Using Production Database (auto-configured)');
   }
 }
 

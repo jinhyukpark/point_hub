@@ -5,7 +5,7 @@ const admin = require('firebase-admin');
 const serviceAccount = require('./serviceAccountKey.json'); // You need to add your service account key
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
-  databaseURL: 'https://pointhub-ab054-default-rtdb.asia-southeast1.firebasedatabase.app'
+  databaseURL: 'https://point-hub-a9db1-default-rtdb.asia-southeast1.firebasedatabase.app'
 });
 
 const db = admin.database();
