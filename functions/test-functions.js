@@ -7,7 +7,7 @@ function testInitializeSystem() {
   });
 
   const options = {
-    hostname: 'us-central1-point-hub-a9db1.cloudfunctions.net',
+    hostname: 'us-central1-pointhub-ab054.cloudfunctions.net',
     port: 443,
     path: '/initializeSystem',
     method: 'POST',
@@ -46,7 +46,7 @@ function testCreateUserProfile() {
   });
 
   const options = {
-    hostname: 'us-central1-point-hub-a9db1.cloudfunctions.net',
+    hostname: 'us-central1-pointhub-ab054.cloudfunctions.net',
     port: 443,
     path: '/createUserProfile',
     method: 'POST',

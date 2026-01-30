@@ -135,12 +135,10 @@ interface OracleSnapshot {
 }
 
 // 매칭 게임 참여
-export const joinMatchingGame = onCall(
-  { cors: true },
-  async (request: CallableRequest) => {
-    if (!request.auth) {
-      throw new Error('Authentication required');
-    }
+export const joinMatchingGame = onCall(async (request: CallableRequest) => {
+  if (!request.auth) {
+    throw new Error('Authentication required');
+  }
 
   const { uid } = request.auth;
   const { numbers, selectionType, gameType }: { 
@@ -299,7 +297,7 @@ export const joinMatchingGame = onCall(
     const betId = `bet_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
     const participant: MatchingParticipant = {
       uid,
-      email: userData.email || userData.auth?.email || 'unknown',
+      email: userData.auth?.email || 'unknown',
       betId,
       coin: 'ALL',
       number: 0,
@@ -813,19 +811,10 @@ export async function calculateMatchingGameResults(gameId: string, overrideWinni
 
     await rtdb.ref(`/games/matching_summary/${gameId}`).set(summary);
 
-    // 정산 완료 상태로 변경
-    await rtdb.ref(`/games/matching/${gameId}/status`).set('settled');
-
-    console.log(`Matching game ${gameId} (${game.gameType}) completed and settled. Winners across ${gameResults.length} ranks.`);
+    console.log(`Matching game ${gameId} (${game.gameType}) completed. Winners across ${gameResults.length} ranks.`);
 
   } catch (error) {
     console.error(`Failed to calculate matching game results for ${gameId}:`, error);
-    // 오류 발생 시에도 상태 업데이트 (재시도 방지)
-    try {
-      await rtdb.ref(`/games/matching/${gameId}/status`).set('error');
-    } catch (updateError) {
-      console.error(`Failed to update error status for ${gameId}:`, updateError);
-    }
   }
 }
 

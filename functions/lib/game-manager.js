@@ -262,12 +262,9 @@ exports.getUserGameHistory = (0, https_1.onCall)(async (request) => {
         const ledgerData = ledgerSnapshot.val() || {};
         const gameTransactions = Object.values(ledgerData).filter((entry) => entry.meta.operation.includes('_bet') ||
             entry.meta.operation.includes('_win')).slice(-limit);
-        const sortedHistory = gameTransactions.reverse(); // 최신순 정렬
         return {
             success: true,
-            history: sortedHistory,
-            histories: sortedHistory, // gameHistory.ts와 호환성 유지
-            total: sortedHistory.length
+            history: gameTransactions.reverse() // 최신순 정렬
         };
     }
     catch (error) {

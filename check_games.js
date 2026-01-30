@@ -3,7 +3,7 @@ const serviceAccount = require('./service-account.json');
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
-  databaseURL: "https://point-hub-a9db1-default-rtdb.asia-southeast1.firebasedatabase.app"
+  databaseURL: "https://pointhub-ab054-default-rtdb.firebaseio.com"
 });
 
 const db = admin.database();

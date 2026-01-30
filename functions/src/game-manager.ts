@@ -361,12 +361,9 @@ export const getUserGameHistory = onCall(async (request: CallableRequest) => {
       entry.meta.operation.includes('_win')
     ).slice(-limit);
 
-    const sortedHistory = gameTransactions.reverse(); // 최신순 정렬
     return {
       success: true,
-      history: sortedHistory,
-      histories: sortedHistory, // gameHistory.ts와 호환성 유지
-      total: sortedHistory.length
+      history: gameTransactions.reverse() // 최신순 정렬
     };
   } catch (error) {
     console.error('Get game history failed:', error);

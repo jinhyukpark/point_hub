@@ -330,7 +330,7 @@ function mergeRewardLogs(existing, newLog) {
     return logs.sort((a, b) => a.round - b.round);
 }
 // 골든벨 게임 참여
-exports.joinGoldenBell = (0, https_1.onCall)({ cors: true }, async (request) => {
+exports.joinGoldenBell = (0, https_1.onCall)(async (request) => {
     var _a, _b, _c;
     const startTime = Date.now();
     let uid;

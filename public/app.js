@@ -55,85 +55,107 @@ class PointHubApp {
         this.historySubscription = null;
         this.historyNotificationCache = new Set();
         this.pendingHistoryNotifications = [];
-
-        // 초기 로그아웃 상태 설정 (로그인 전까지 Cloud Functions 차단)
-        window.isLoggedOut = true;
-
+        
         this.init();
     }
 
     async init() {
         console.log('🚀 PointHub App initializing...');
-
+        
         // Detect browser and add appropriate classes
         this.detectBrowser();
-
-        // 글로벌 키보드 이벤트 차단 - Unity가 로그인 폼 이벤트를 가로채지 못하게
-        this.setupGlobalKeyboardBlocker();
-
+        
         // Initialize UI event handlers
         this.setupUI();
-
+        
+        // Debug input field issues
+        this.debugInputFields();
+        
         // Unity 로드는 Auth 완료 후에만 시작됨 (setupAuthStateListener에서 처리)
         // 로그인 또는 회원가입 완료 시 자동으로 Unity 로드 시작
-
+        
         // Setup Firebase auth state listener
         this.setupAuthStateListener();
     }
 
-    setupGlobalKeyboardBlocker() {
-        // 로그아웃 상태일 때 Unity Canvas로 가는 모든 키보드 이벤트 차단
-        const blockUnityKeyboardEvents = (e) => {
-            // authenticated 클래스가 없으면 (로그아웃 상태) Unity 이벤트 차단
-            if (!document.body.classList.contains('authenticated')) {
-                const unityCanvas = document.getElementById('unity-canvas');
-                if (unityCanvas && e.target === unityCanvas) {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    console.log('🚫 Blocked Unity keyboard event during auth');
-                    return false;
-                }
-            }
-        };
-
-        // 캡처 단계에서 차단 (Unity보다 먼저 처리)
-        document.addEventListener('keydown', blockUnityKeyboardEvents, true);
-        document.addEventListener('keyup', blockUnityKeyboardEvents, true);
-        document.addEventListener('keypress', blockUnityKeyboardEvents, true);
-
-        console.log('🔒 Global keyboard blocker installed');
-    }
-
     detectBrowser() {
+        // ============================================
+        // 🧪 TEST MODE: 항상 삼성 인터넷으로 감지
+        // 테스트 완료 후 이 블록을 제거하거나 주석 처리하세요
+        // ============================================
+        document.body.classList.remove('samsung-internet', 'chrome-detected', 'firefox-detected', 'safari-detected');
+        console.log('🧪 TEST MODE: 항상 삼성 인터넷 모드로 강제 설정');
+        document.body.classList.add('samsung-internet');
+        setTimeout(() => {
+            const authPopup = document.querySelector('.auth-popup');
+            if (authPopup) {
+                console.log('📱 삼성 인터넷 스타일 적용 확인');
+            }
+        }, 100);
+        return;
+        // ============================================
+        // 테스트 모드 끝
+        // ============================================
+        
+        /* 원래 브라우저 감지 로직 (테스트 모드 비활성화 시 사용)
         const userAgent = navigator.userAgent.toLowerCase();
         const vendor = navigator.vendor ? navigator.vendor.toLowerCase() : '';
-
+        console.log('🔍 Browser detection - UserAgent:', navigator.userAgent);
+        console.log('🔍 Browser detection - Vendor:', vendor);
+        
+        // Remove any existing browser classes
         document.body.classList.remove('samsung-internet', 'chrome-detected', 'firefox-detected', 'safari-detected');
-
-        // Check for manual override (for testing via URL param ?browser=samsung)
+        
+        // Check for manual override (for testing)
         const urlParams = new URLSearchParams(window.location.search);
         const forceBrowser = urlParams.get('browser');
-
+        
         if (forceBrowser === 'samsung') {
+            console.log('🧪 Forcing Samsung Internet mode for testing');
             document.body.classList.add('samsung-internet');
             return;
         }
-
-        // Samsung Internet detection
-        const isSamsungInternet =
+        
+        // Samsung Internet detection - multiple methods for better detection
+        const isSamsungInternet = 
             userAgent.includes('samsungbrowser') ||
-            (userAgent.includes('samsung') && userAgent.includes('mobile') && !userAgent.includes('chrome')) ||
+            userAgent.includes('samsung') && userAgent.includes('mobile') && !userAgent.includes('chrome') ||
             (userAgent.includes('android') && vendor.includes('samsung') && !userAgent.includes('chrome'));
-
+        
         if (isSamsungInternet) {
+            console.log('📱 Samsung Internet detected');
             document.body.classList.add('samsung-internet');
-        } else if (userAgent.includes('chrome') && !userAgent.includes('samsungbrowser') && !userAgent.includes('edg')) {
+        }
+        // Chrome detection (but not Samsung Internet which also includes Chrome)
+        else if (userAgent.includes('chrome') && !userAgent.includes('samsungbrowser') && !userAgent.includes('edg')) {
+            console.log('🌍 Chrome detected');
             document.body.classList.add('chrome-detected');
-        } else if (userAgent.includes('firefox')) {
+        }
+        // Firefox detection
+        else if (userAgent.includes('firefox')) {
+            console.log('🔥 Firefox detected');
             document.body.classList.add('firefox-detected');
-        } else if (userAgent.includes('safari') && !userAgent.includes('chrome') && !userAgent.includes('android')) {
+        }
+        // Safari detection
+        else if (userAgent.includes('safari') && !userAgent.includes('chrome') && !userAgent.includes('android')) {
+            console.log('🧭 Safari detected');
             document.body.classList.add('safari-detected');
         }
+        
+        console.log('✅ Browser detection complete:', document.body.className);
+        
+        // Force apply Samsung Internet styles if detected (for debugging)
+        if (document.body.classList.contains('samsung-internet')) {
+            console.log('📱 Applying Samsung Internet specific styles');
+            // Add a small delay to ensure styles are applied
+            setTimeout(() => {
+                const authPopup = document.querySelector('.auth-popup');
+                if (authPopup) {
+                    console.log('📱 Auth popup found, verifying Samsung Internet styles');
+                }
+            }, 100);
+        }
+        */
     }
 
     setupUI() {
@@ -153,14 +175,14 @@ class PointHubApp {
     
     _setupUIElements() {
         console.log('🔧 Setting up UI elements...');
-
+        
         // Auth form elements
         this.elements = {
             // Containers
             authContainer: document.getElementById('auth-container'),
             backgroundContainer: document.getElementById('background-container'),
             unityLoading: document.getElementById('unity-loading'),
-
+            
             // Login form
             loginForm: document.getElementById('login-form'),
             loginEmail: document.getElementById('login-email'),
@@ -168,7 +190,7 @@ class PointHubApp {
             loginBtn: document.getElementById('login-btn'),
             loginError: document.getElementById('login-error'),
             loginLoading: document.getElementById('login-loading'),
-
+            
             // Signup form
             signupForm: document.getElementById('signup-form'),
             signupEmail: document.getElementById('signup-email'),
@@ -178,29 +200,11 @@ class PointHubApp {
             signupError: document.getElementById('signup-error'),
             signupSuccess: document.getElementById('signup-success'),
             signupLoading: document.getElementById('signup-loading'),
-
+            
             // Navigation
             showSignup: document.getElementById('show-signup'),
             showLogin: document.getElementById('show-login')
         };
-
-        // 자동완성 방지: 입력 필드에 포커스 시 autocomplete 속성 재설정
-        const preventAutofill = (element) => {
-            if (!element) return;
-            element.addEventListener('focus', () => {
-                element.setAttribute('autocomplete', 'new-password');
-                element.setAttribute('readonly', 'readonly');
-                setTimeout(() => {
-                    element.removeAttribute('readonly');
-                }, 100);
-            });
-        };
-
-        preventAutofill(this.elements.loginEmail);
-        preventAutofill(this.elements.loginPassword);
-        preventAutofill(this.elements.signupEmail);
-        preventAutofill(this.elements.signupPassword);
-        preventAutofill(this.elements.signupConfirm);
 
         // 디버깅: 요소들이 제대로 로드되었는지 확인
         console.log('📋 UI Elements loaded:', {
@@ -321,24 +325,19 @@ class PointHubApp {
 
             this.isUnityLoaded = true;
             console.log('✅ Unity loaded successfully');
-            console.log('🎮 Unity instance set:', !!this.unityInstance);
-
+            
             // Hide loading screen
             if (this.elements.unityLoading) {
                 this.elements.unityLoading.style.display = 'none';
             }
-
+            
             // Unity 로드 완료 후 인증 페이지 완전히 숨기기
             this.hideAuthInterface();
-
+            
             // If user data is pending, send it now
-            console.log('📦 Checking pending user data:', this.pendingUserData);
             if (this.pendingUserData) {
-                console.log('✅ Pending data found, sending to Unity now...');
                 this.sendUserDataToUnity(this.pendingUserData);
                 this.pendingUserData = null;
-            } else {
-                console.log('ℹ️ No pending user data');
             }
 
             // Expose Unity functions globally for debugging
@@ -355,124 +354,18 @@ class PointHubApp {
         }
     }
 
-    async ensureWalletStructure() {
-        try {
-            console.log('💰 Checking wallet structure...');
-
-            if (!this.currentUser) {
-                console.error('❌ No current user for wallet check');
-                return;
-            }
-
-            const uid = this.currentUser.uid;
-
-            // 사용자 데이터 읽기
-            const userRef = window.firebaseRef(window.firebaseDatabase, `/users/${uid}`);
-            const snapshot = await window.firebaseGet(userRef);
-
-            if (!snapshot.exists()) {
-                console.warn('⚠️ User data not found');
-                return;
-            }
-
-            const userData = snapshot.val();
-            console.log('💰 Current user data:', {
-                balance: userData.balance,
-                wallet: userData.wallet
-            });
-
-            // wallet 구조 확인 및 수정
-            const walletUsdt = userData.wallet?.usdt || 0;
-            const balance = userData.balance || 0;
-
-            if (!userData.wallet || walletUsdt === 0) {
-                console.log('💰 Wallet structure missing or empty, fixing...');
-
-                // balance 값이 있으면 그것을 사용, 없으면 10000 설정
-                const targetBalance = balance > 0 ? balance : 10000;
-
-                const walletRef = window.firebaseRef(window.firebaseDatabase, `/users/${uid}/wallet`);
-                await window.firebaseSet(walletRef, { usdt: targetBalance });
-
-                if (balance === 0) {
-                    const balanceRef = window.firebaseRef(window.firebaseDatabase, `/users/${uid}/balance`);
-                    await window.firebaseSet(balanceRef, targetBalance);
-                }
-
-                console.log(`✅ Wallet structure fixed! Set to ${targetBalance} USDT`);
-            } else {
-                console.log(`✅ Wallet structure OK: ${walletUsdt} USDT`);
-            }
-
-        } catch (error) {
-            console.error('❌ Error ensuring wallet structure:', error);
-            // 에러 발생해도 게임 진행에는 문제없도록 조용히 처리
-        }
-    }
-
-    async ensureCubeGameReady() {
-        try {
-            console.log('🎲 Ensuring cube game is ready...');
-
-            if (!window.firebaseFunctions || !window.httpsCallable) {
-                console.error('❌ Firebase Functions not initialized');
-                return;
-            }
-
-            const ensureGameFunction = window.httpsCallable(window.firebaseFunctions, 'ensureCubeGameReady');
-            const result = await ensureGameFunction();
-
-            if (result.data.success) {
-                console.log('✅ Cube game ready:', result.data);
-
-                if (result.data.gameCreated) {
-                    console.log('🎲 New cube game was created:', result.data.gameId);
-                } else {
-                    console.log('🎲 Existing game is valid:', result.data.gameId);
-                }
-
-                console.log(`   - Game ID: ${result.data.gameId}`);
-                console.log(`   - Status: ${result.data.status}`);
-                console.log(`   - Positions: ${result.data.positionsCount}`);
-                console.log(`   - Participants: ${result.data.participantCount || 0}`);
-            } else {
-                console.error('❌ Failed to ensure cube game ready:', result.data);
-            }
-
-        } catch (error) {
-            console.error('❌ Error ensuring cube game ready:', error);
-            // 에러 발생해도 게임 진행에는 문제없도록 조용히 처리
-        }
-    }
-
     setupAuthStateListener() {
         // Firebase Auth 상태 변화를 감지하여 로그인/로그아웃 처리
         // Unity는 Auth 완료 후에만 로드됨
         window.onAuthStateChanged(window.firebaseAuth, (user) => {
             console.log('🔐 Auth state changed:', user ? user.uid : 'logged out');
-
+            
             if (user) {
                 // 사용자 로그인 완료 (회원가입 후 자동 로그인 포함)
                 this.currentUser = user;
-
-                // 로그아웃 플래그 해제 및 경고 플래그 리셋
-                window.isLoggedOut = false;
-                window.loggedOutWarningShown = false;
-                console.log('✅ Login detected - Cloud Functions enabled');
-
                 this.startUserDataSync();
                 this.hideAuthInterface();
-
-                // 지갑 구조 자동 마이그레이션 (로그인 직후 자동 실행)
-                this.ensureWalletStructure().catch(error => {
-                    console.error('❌ Failed to ensure wallet structure:', error);
-                });
-
-                // 큐브 게임 상태 확인 및 초기화 (로그인 직후 자동 실행)
-                this.ensureCubeGameReady().catch(error => {
-                    console.error('❌ Failed to ensure cube game ready:', error);
-                });
-
+                
                 // Unity 로드는 Auth 완료 후에만 시작 (회원가입 포함)
                 if (!this.isUnityLoaded) {
                     console.log('🎮 Starting Unity loading after authentication...');
@@ -481,32 +374,9 @@ class PointHubApp {
                 }
             } else {
                 // 사용자 로그아웃
-                console.log('🔓 Auth state changed to logged out');
                 this.currentUser = null;
-
-                // 로그아웃 플래그 설정 (Cloud Functions 호출 차단)
-                window.isLoggedOut = true;
-                console.log('🚫 Logout detected - Cloud Functions disabled');
-
                 this.stopUserDataSync();
                 this.stopUserDataUpload();
-
-                // Unity에 로그아웃 상태 전송
-                if (this.unityInstance) {
-                    const logoutPayload = {
-                        action: 'authStateLogout',
-                        success: true,
-                        loggedOut: true,
-                        timestamp: Date.now(),
-                        message: 'Auth state changed - user logged out'
-                    };
-                    console.log('📤 Sending auth state logout notification to Unity:', logoutPayload);
-                    this.unityInstance.SendMessage('Bridge', 'OnUserLogout', JSON.stringify(logoutPayload));
-                    console.log('✅ Auth state logout notification sent');
-                } else {
-                    console.warn('⚠️ Unity instance not available for auth state logout notification');
-                }
-
                 this.showAuthInterface();
             }
         });
@@ -514,40 +384,16 @@ class PointHubApp {
 
     startUserDataSync() {
         console.log('📊 Starting user data sync for:', this.currentUser.uid);
-
+        
         // Reference to user data
         this.userDataRef = window.firebaseRef(window.firebaseDatabase, `/users/${this.currentUser.uid}`);
-
-        // 사용자 프로필 확인 타임아웃 (10초)
-        // createUserProfile Cloud Function이 완료될 시간을 줌
-        const PROFILE_CHECK_TIMEOUT_MS = 10000;
-        this.userDataReceived = false;
-
-        // 타임아웃 설정 - 10초 후에도 프로필이 없으면 로그아웃
-        this.profileCheckTimeout = setTimeout(() => {
-            if (!this.userDataReceived) {
-                console.error('❌ User profile not found after timeout. Logging out...');
-                this.forceLogoutDueToMissingProfile();
-            }
-        }, PROFILE_CHECK_TIMEOUT_MS);
-
+        
         // Listen for real-time updates
         window.firebaseOnValue(this.userDataRef, (snapshot) => {
             const userData = snapshot.val();
-            console.log('📥 Raw user data from Firebase:', userData);
-
             if (userData) {
-                // 사용자 데이터 존재 - 정상 처리
-                this.userDataReceived = true;
-
-                // 타임아웃 해제
-                if (this.profileCheckTimeout) {
-                    clearTimeout(this.profileCheckTimeout);
-                    this.profileCheckTimeout = null;
-                }
-
                 console.log('📈 User data updated:', userData);
-
+                
                 // Add auth info to user data
                 const enrichedData = {
                     ...userData,
@@ -557,63 +403,20 @@ class PointHubApp {
                         emailVerified: this.currentUser.emailVerified
                     }
                 };
-
-                console.log('🎯 Unity loaded status:', this.isUnityLoaded);
-                console.log('🎮 Unity instance exists:', !!this.unityInstance);
-
-                if (this.isUnityLoaded && this.unityInstance) {
-                    console.log('✅ Unity is loaded, sending data now...');
+                
+                if (this.isUnityLoaded) {
                     this.sendUserDataToUnity(enrichedData);
                 } else {
-                    console.log('⏳ Unity not loaded yet, storing as pending data...');
+                    // Store data until Unity is ready
                     this.pendingUserData = enrichedData;
-                    console.log('📦 Pending data stored:', this.pendingUserData);
                 }
-            } else {
-                console.warn('⚠️ No user data found in Firebase! Waiting for profile creation...');
-                // 타임아웃이 처리하므로 여기서는 대기만 함
-                // createUserProfile이 완료되면 onValue가 다시 호출됨
             }
         });
 
         this.startHistorySubscription('auth-state');
     }
 
-    // 프로필 누락으로 인한 강제 로그아웃
-    async forceLogoutDueToMissingProfile() {
-        console.error('🚫 Force logout: User profile missing in database');
-
-        // 타임아웃 정리
-        if (this.profileCheckTimeout) {
-            clearTimeout(this.profileCheckTimeout);
-            this.profileCheckTimeout = null;
-        }
-
-        // 리스너 정리
-        this.stopUserDataSync();
-
-        // 사용자에게 알림
-        alert('회원 정보를 찾을 수 없습니다. 다시 회원가입해 주세요.\n\nUser profile not found. Please sign up again.');
-
-        try {
-            // Firebase Auth 로그아웃
-            await window.signOut(window.firebaseAuth);
-            console.log('✅ User signed out due to missing profile');
-        } catch (error) {
-            console.error('❌ Error during force logout:', error);
-        }
-
-        // 로그인 페이지로 리다이렉트
-        window.location.href = '/login.html';
-    }
-
     stopUserDataSync() {
-        // 프로필 체크 타임아웃 정리
-        if (this.profileCheckTimeout) {
-            clearTimeout(this.profileCheckTimeout);
-            this.profileCheckTimeout = null;
-        }
-
         if (this.userDataRef) {
             window.firebaseOff(this.userDataRef);
             this.userDataRef = null;
@@ -815,54 +618,97 @@ class PointHubApp {
         }
     }
 
+    debugInputFields() {
+        console.log('🔍 Debugging input fields...');
+        
+        setTimeout(() => {
+            // 1. input 요소들이 실제로 존재하는지 확인
+            const emailInput = document.getElementById('login-email');
+            const passwordInput = document.getElementById('login-password');
+            
+            console.log('Email input:', emailInput);
+            console.log('Password input:', passwordInput);
+            
+            if (emailInput) {
+                console.log('Email styles:', {
+                    display: window.getComputedStyle(emailInput).display,
+                    pointerEvents: window.getComputedStyle(emailInput).pointerEvents,
+                    visibility: window.getComputedStyle(emailInput).visibility,
+                    zIndex: window.getComputedStyle(emailInput).zIndex
+                });
+                
+                // 이벤트 리스너 테스트
+                emailInput.addEventListener('input', e => console.log('📧 Email input event:', e.target.value));
+                emailInput.addEventListener('keydown', e => console.log('📧 Email keydown:', e.key));
+                emailInput.addEventListener('focus', e => console.log('📧 Email focused'));
+                emailInput.addEventListener('blur', e => console.log('📧 Email blurred'));
+                
+                // 읽기 전용 속성 확인
+                console.log('📧 Email readonly:', emailInput.readOnly);
+                console.log('📧 Email disabled:', emailInput.disabled);
+            }
+            
+            if (passwordInput) {
+                console.log('Password styles:', {
+                    display: window.getComputedStyle(passwordInput).display,
+                    pointerEvents: window.getComputedStyle(passwordInput).pointerEvents,
+                    visibility: window.getComputedStyle(passwordInput).visibility,
+                    zIndex: window.getComputedStyle(passwordInput).zIndex
+                });
+                
+                // 이벤트 리스너 테스트
+                passwordInput.addEventListener('input', e => console.log('🔐 Password input event:', e.target.value));
+                passwordInput.addEventListener('keydown', e => console.log('🔐 Password keydown:', e.key));
+                passwordInput.addEventListener('focus', e => console.log('🔐 Password focused'));
+                passwordInput.addEventListener('blur', e => console.log('🔐 Password blurred'));
+                
+                // 읽기 전용 속성 확인
+                console.log('🔐 Password readonly:', passwordInput.readOnly);
+                console.log('🔐 Password disabled:', passwordInput.disabled);
+            }
+            
+            // Unity Canvas 상태 확인
+            const unityCanvas = document.getElementById('unity-canvas');
+            if (unityCanvas) {
+                console.log('Unity Canvas styles:', {
+                    display: window.getComputedStyle(unityCanvas).display,
+                    pointerEvents: window.getComputedStyle(unityCanvas).pointerEvents,
+                    visibility: window.getComputedStyle(unityCanvas).visibility,
+                    zIndex: window.getComputedStyle(unityCanvas).zIndex
+                });
+            }
+            
+            // Body 클래스 확인
+            console.log('Body classes:', document.body.className);
+            
+            // Firebase 상태 확인
+            console.log('Firebase Auth:', window.firebaseAuth);
+            console.log('Firebase functions available:', {
+                signInWithEmailAndPassword: typeof window.signInWithEmailAndPassword,
+                createUserWithEmailAndPassword: typeof window.createUserWithEmailAndPassword,
+                onAuthStateChanged: typeof window.onAuthStateChanged
+            });
+            
+            // 다른 이벤트 리스너들 확인
+            console.log('Document event listeners count:', Object.keys(document).filter(key => key.startsWith('on')).length);
+            
+        }, 1000); // Unity 로딩 후 확인
+    }
+
     sendUserDataToUnity(userData) {
-        console.log('🚀 sendUserDataToUnity called');
-        console.log('🎮 Unity instance:', this.unityInstance);
-
-        if (!this.unityInstance) {
-            console.error('❌ Unity instance not found! Cannot send user data.');
-            return;
-        }
-
+        if (!this.unityInstance) return;
+        
         try {
-            // Transform flat structure to nested structure Unity expects
-            const transformedData = {
-                wallet: {
-                    usdt: userData.wallet?.usdt || userData.balance || 0,
-                    ivy: userData.wallet?.ivy || 0,
-                    pending: userData.wallet?.pending || 0
-                },
-                auth: {
-                    uid: userData.uid || '',
-                    email: userData.email || '',
-                    emailVerified: userData.emailVerified || false
-                },
-                profile: {
-                    displayName: userData.displayName || '',
-                    isVip: userData.isVip || false,
-                    createdAt: userData.createdAt || 0,
-                    updatedAt: userData.updatedAt || 0
-                }
-            };
-
-            const payload = {
-                success: true,
-                data: transformedData
-            };
-
-            console.log('📤 Original user data:', userData);
-            console.log('🔄 Transformed data:', transformedData);
-            console.log('📦 Full payload:', payload);
-            console.log('📝 JSON stringified:', JSON.stringify(payload));
-
+            console.log('📤 Sending user data to Unity:', userData);
+            
             // Send to Unity via SendMessage
-            this.unityInstance.SendMessage('Bridge', 'OnUserDataUpdated', JSON.stringify(payload));
-
-            console.log('✅ User data sent to Unity successfully');
-
+            this.unityInstance.SendMessage('Bridge', 'OnUserDataUpdated', JSON.stringify({
+                success: true,
+                data: userData
+            }));
+            
         } catch (error) {
             console.error('❌ Failed to send data to Unity:', error);
-            console.error('❌ Error stack:', error.stack);
         }
     }
 
@@ -996,16 +842,8 @@ class PointHubApp {
         this.elements.loginForm.classList.remove('hidden');
         this.elements.signupForm.classList.add('hidden');
         this.clearMessages('login');
-
-        // 입력 필드 초기화
-        if (this.elements.loginEmail) {
-            this.elements.loginEmail.value = '';
-        }
-        if (this.elements.loginPassword) {
-            this.elements.loginPassword.value = '';
-        }
-
-        // 링크 다시 표시
+        
+        // 링크 다시 표시 (로딩이 끝났을 때를 대비)
         if (this.elements.showSignup) {
             this.elements.showSignup.style.display = '';
         }
@@ -1015,16 +853,12 @@ class PointHubApp {
         if (this.elements.loginBtn) {
             this.elements.loginBtn.style.display = '';
         }
-
-        // 지연 후 포커스 설정
-        setTimeout(() => {
-            if (this.elements.loginEmail) {
-                this.elements.loginEmail.focus();
-            }
-        }, 100);
+        
+        this.elements.loginEmail.focus();
     }
 
     showSignupForm() {
+        console.log('📝 Showing signup form');
         if (this.elements.signupForm) {
             this.elements.signupForm.classList.remove('hidden');
         }
@@ -1032,8 +866,8 @@ class PointHubApp {
             this.elements.loginForm.classList.add('hidden');
         }
         this.clearMessages('signup');
-
-        // 링크 다시 표시
+        
+        // 링크 다시 표시 (로딩이 끝났을 때를 대비)
         if (this.elements.showSignup) {
             this.elements.showSignup.style.display = '';
         }
@@ -1043,82 +877,25 @@ class PointHubApp {
         if (this.elements.signupBtn) {
             this.elements.signupBtn.style.display = '';
         }
-
-        // 지연 후 포커스 설정
-        setTimeout(() => {
-            if (this.elements.signupEmail) {
-                this.elements.signupEmail.focus();
-            }
-        }, 100);
+        
+        if (this.elements.signupEmail) {
+            this.elements.signupEmail.focus();
+        }
     }
 
     showAuthInterface() {
         console.log('🔐 Showing authentication interface');
         document.body.classList.remove('authenticated');
-
-        // Unity를 완전히 비활성화 - 키보드 이벤트 가로채기 방지
-        const unityCanvas = document.getElementById('unity-canvas');
-        if (unityCanvas) {
-            unityCanvas.style.pointerEvents = 'none';
-            unityCanvas.style.display = 'none';
-            unityCanvas.tabIndex = -1; // 포커스 받지 못하게
-            unityCanvas.blur(); // 포커스 해제
-            console.log('🚫 Unity Canvas completely disabled for login form');
-        }
-
-        // Unity Instance에 입력 처리 중단 메시지 전송
-        if (this.unityInstance) {
-            try {
-                // Unity에 로그아웃 알림 및 입력 처리 중단 요청
-                this.unityInstance.SendMessage('Bridge', 'OnAuthInterfaceShown', 'true');
-                console.log('📤 Sent auth interface shown message to Unity');
-            } catch (error) {
-                console.warn('⚠️ Failed to send message to Unity:', error);
-            }
-        }
-
+        
         // Unity가 로드되어 있으면 Unity 숨기기
         if (this.isUnityLoaded && this.elements.unityLoading) {
             this.elements.unityLoading.style.display = 'none';
         }
-
-        // 모든 입력 필드 초기화 (로그아웃 시 자동완성 방지)
-        if (this.elements.loginEmail) {
-            this.elements.loginEmail.value = '';
-            this.elements.loginEmail.blur();
-        }
-        if (this.elements.loginPassword) {
-            this.elements.loginPassword.value = '';
-        }
-        if (this.elements.signupEmail) {
-            this.elements.signupEmail.value = '';
-        }
-        if (this.elements.signupPassword) {
-            this.elements.signupPassword.value = '';
-        }
-        if (this.elements.signupConfirm) {
-            this.elements.signupConfirm.value = '';
-        }
-
+        
         // 인증 페이지 표시
         if (this.elements.authContainer) {
             this.elements.authContainer.style.display = 'flex';
             this.elements.authContainer.style.visibility = 'visible';
-            this.elements.authContainer.style.zIndex = '1000';
-
-            // Auth Container의 모든 키보드 이벤트가 Unity로 전파되지 않도록 차단
-            if (!this.authContainerKeyboardBlocker) {
-                this.authContainerKeyboardBlocker = (e) => {
-                    // 이벤트가 auth-container 내부에서 발생한 경우 전파 중단
-                    e.stopPropagation();
-                };
-
-                // 캡처 단계에서 이벤트 차단 (Unity보다 먼저 처리)
-                this.elements.authContainer.addEventListener('keydown', this.authContainerKeyboardBlocker, true);
-                this.elements.authContainer.addEventListener('keyup', this.authContainerKeyboardBlocker, true);
-                this.elements.authContainer.addEventListener('keypress', this.authContainerKeyboardBlocker, true);
-                console.log('🔒 Keyboard event blocker installed on auth container');
-            }
         }
         if (this.elements.backgroundContainer) {
             this.elements.backgroundContainer.style.display = 'block';
@@ -1133,26 +910,7 @@ class PointHubApp {
     hideAuthInterface() {
         console.log('🎮 Hiding authentication interface');
         document.body.classList.add('authenticated');
-
-        // Unity Canvas 다시 활성화
-        const unityCanvas = document.getElementById('unity-canvas');
-        if (unityCanvas) {
-            unityCanvas.style.pointerEvents = 'auto';
-            unityCanvas.style.display = 'block';
-            unityCanvas.tabIndex = 0; // 포커스 가능하게 복원
-            console.log('✅ Unity Canvas events enabled');
-        }
-
-        // Unity Instance에 인증 완료 메시지 전송
-        if (this.unityInstance) {
-            try {
-                this.unityInstance.SendMessage('Bridge', 'OnAuthInterfaceHidden', 'true');
-                console.log('📤 Sent auth interface hidden message to Unity');
-            } catch (error) {
-                console.warn('⚠️ Failed to send message to Unity:', error);
-            }
-        }
-
+        
         // CSS로 자동 숨김 처리되지만 확실하게 하기 위해 직접 설정
         if (this.elements.authContainer) {
             this.elements.authContainer.style.display = 'none';
@@ -1162,7 +920,7 @@ class PointHubApp {
             this.elements.backgroundContainer.style.display = 'none';
             this.elements.backgroundContainer.style.visibility = 'hidden';
         }
-
+        
         console.log('✅ Authentication interface hidden completely');
     }
 
@@ -1239,45 +997,8 @@ class PointHubApp {
     // Public methods for Unity communication
     async logout() {
         try {
-            console.log('🚪 Starting logout process...');
-
-            // 로그아웃 플래그 먼저 설정 (Cloud Functions 호출 즉시 차단)
-            window.isLoggedOut = true;
-            window.loggedOutWarningShown = false; // 경고 메시지 리셋
-            console.log('🚫 Cloud Functions disabled immediately');
-
-            // Unity에 로그아웃 알림 전송 후 인스턴스 언로드
-            if (this.unityInstance) {
-                const logoutPayload = {
-                    action: 'logout',
-                    timestamp: Date.now(),
-                    message: 'User logged out - stop all authenticated API calls'
-                };
-                console.log('📤 Sending logout notification to Unity:', logoutPayload);
-                this.unityInstance.SendMessage('Bridge', 'OnUserLogout', JSON.stringify(logoutPayload));
-                console.log('✅ Logout notification sent to Unity');
-
-                // Unity 인스턴스 언로드 (더 이상 호출 불가)
-                console.log('🔄 Unloading Unity instance...');
-                try {
-                    await this.unityInstance.Quit();
-                    console.log('✅ Unity instance unloaded');
-                } catch (e) {
-                    console.warn('⚠️ Unity quit error (may be normal):', e);
-                }
-                this.unityInstance = null;
-                window.unityInstance = null;
-                this.isUnityLoaded = false;
-            } else {
-                console.warn('⚠️ Unity instance not available for logout notification');
-            }
-
             await window.signOut(window.firebaseAuth);
-            console.log('✅ Firebase logout successful');
-
-            // 페이지 새로고침으로 완전 초기화
-            console.log('🔄 Reloading page...');
-            window.location.reload();
+            console.log('✅ Logout successful');
         } catch (error) {
             console.error('❌ Logout failed:', error);
         }
@@ -1347,35 +1068,11 @@ window.callUnityFunction = (objectName, methodName, data) => {
     }
 };
 
-// Unity가 사용자 인증 상태를 확인할 수 있는 헬퍼 함수
-window.isUserAuthenticated = () => {
-    const isAuthenticated = !!window.firebaseAuth?.currentUser;
-    console.log('🔐 Authentication check:', isAuthenticated);
-    return isAuthenticated;
-};
-
-// 로그아웃 상태 플래그
-window.isLoggedOut = false;
-window.loggedOutWarningShown = false;
-
 // Cloud Function 호출 (Unity에서 사용)
 window.callCloudFunction = async (dataStr) => {
     try {
         const params = JSON.parse(dataStr);
-
-        // 로그아웃 상태에서는 모든 Cloud Functions 호출 차단 (실제 인증 상태 확인)
-        if (!window.firebaseAuth?.currentUser) {
-            // 경고 메시지는 첫 번째만 출력 (로그 스팸 방지)
-            if (!window.loggedOutWarningShown) {
-                console.warn('🚫 No authenticated user - Cloud function calls blocked. Unity should stop game logic.');
-                window.loggedOutWarningShown = true;
-            }
-            // 조용히 무시
-            return;
-        }
-
-        // 로그인 상태에서만 출력
-        // console.log('🔥 Unity calling cloud function:', params.functionName, params.params);
+        console.log('🔥 Unity calling cloud function:', params.functionName, params.params);
 
         if (!window.firebaseFunctions || !window.httpsCallable) {
             console.error('❌ Firebase Functions not initialized');
@@ -1391,34 +1088,13 @@ window.callCloudFunction = async (dataStr) => {
             return;
         }
 
-        // 인증이 필요한 함수인 경우 로그인 상태 체크
-        const requiresAuth = !params.functionName.includes('Public') &&
-                           !params.functionName.includes('public');
-
-        if (requiresAuth && !window.firebaseAuth?.currentUser) {
-            console.warn('⚠️ Authentication required but user is not logged in:', params.functionName);
-            // 로그아웃 상태 플래그 설정
-            window.isLoggedOut = true;
-            // Unity에 에러 전송 (한 번만)
-            if (window.unityInstance) {
-                window.unityInstance.SendMessage('Bridge', 'OnCloudFunctionResponse', JSON.stringify({
-                    success: false,
-                    functionName: params.functionName,
-                    error: 'User not authenticated',
-                    requiresLogin: true,
-                    timestamp: Date.now()
-                }));
-            }
-            return;
-        }
-
         // Firebase Cloud Function 호출
         console.log('📡 Calling Firebase Function:', params.functionName);
         const cloudFunction = window.httpsCallable(window.firebaseFunctions, params.functionName);
         const result = await cloudFunction(params.params);
-
+        
         console.log('✅ Cloud Function result:', result.data);
-
+        
         // Unity에 결과 전송
         if (window.unityInstance) {
             window.unityInstance.SendMessage('Bridge', 'OnCloudFunctionResponse', JSON.stringify({
@@ -1428,10 +1104,10 @@ window.callCloudFunction = async (dataStr) => {
                 timestamp: Date.now()
             }));
         }
-
+        
     } catch (error) {
         console.error('❌ Error calling cloud function:', error);
-
+        
         // 파라미터 파싱 시도
         let functionName = 'unknown';
         try {
@@ -1440,7 +1116,7 @@ window.callCloudFunction = async (dataStr) => {
         } catch (parseError) {
             console.error('❌ Error parsing params in catch block:', parseError);
         }
-
+        
         // Unity에 에러 전송
         if (window.unityInstance) {
             window.unityInstance.SendMessage('Bridge', 'OnCloudFunctionResponse', JSON.stringify({
@@ -1694,19 +1370,6 @@ function normalizeGoldenBellGame(gameId, rawGame) {
         status: rawGame?.status ?? 'waiting',
         round: rawGame?.round ?? 1,
         maxRounds: rawGame?.maxRounds ?? 10
-    };
-}
-
-function normalizeGoldenBellParticipant(uid, rawParticipant) {
-    if (!rawParticipant) return null;
-    return {
-        uid,
-        ...rawParticipant,
-        joinedAt: normalizeTimestamp(rawParticipant?.joinedAt, Date.now()),
-        totalBet: rawParticipant?.totalBet ?? 0,
-        accumulatedReward: rawParticipant?.accumulatedReward ?? 0,
-        isActive: rawParticipant?.isActive ?? true,
-        isVip: rawParticipant?.isVip ?? false
     };
 }
 
@@ -2309,4 +1972,3 @@ window.fetchGoldenBellParticipants = async (dataStr) => {
         });
     }
 };
-
