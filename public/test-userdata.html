@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test User Data</title>
+</head>
+<body>
+    <h1>User Data Test</h1>
+    <div id="output" style="white-space: pre-wrap; font-family: monospace;"></div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js';
+        import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js';
+        import { getDatabase, ref, get, connectDatabaseEmulator } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js';
+
+        const firebaseConfig = window.firebaseConfig;
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const database = getDatabase(app);
+
+        // Connect to emulator
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            connectDatabaseEmulator(database, "127.0.0.1", 9000);
+            console.log('Connected to Database emulator');
+        }
+
+        const output = document.getElementById('output');
+
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                output.textContent = `Logged in as: ${user.email} (${user.uid})\n\n`;
+                output.textContent += 'Fetching user data...\n\n';
+
+                const userRef = ref(database, `/users/${user.uid}`);
+                const snapshot = await get(userRef);
+
+                if (snapshot.exists()) {
+                    const userData = snapshot.val();
+                    output.textContent += 'User data from Database:\n';
+                    output.textContent += JSON.stringify(userData, null, 2);
+                } else {
+                    output.textContent += 'No user data found in database!';
+                }
+            } else {
+                output.textContent = 'Not logged in. Please login first.';
+            }
+        });
+    </script>
+    <script src="firebase-config.js"></script>
+</body>
+</html>

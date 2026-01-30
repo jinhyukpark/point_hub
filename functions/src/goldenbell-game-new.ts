@@ -487,9 +487,11 @@ function mergeRewardLogs(
 }
 
 // 골든벨 게임 참여
-export const joinGoldenBell = onCall(async (request: CallableRequest) => {
-  const startTime = Date.now();
-  let uid: string | undefined;
+export const joinGoldenBell = onCall(
+  { cors: true },
+  async (request: CallableRequest) => {
+    const startTime = Date.now();
+    let uid: string | undefined;
   
   try {
     // 인증 확인

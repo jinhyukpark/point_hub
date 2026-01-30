@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.cubeGameSettlementWorker = exports.testResetCubeGame = exports.testCubeGameWithFixedMove = exports.testCubeGameWithOracle = exports.testFillCubeGame = exports.testCubeGameSettlement = exports.initializeCubeGame = exports.finalizeCubeGameHistory = exports.getCubeGameHistory = exports.getCurrentCubeGame = exports.getCubeGamePositions = exports.getCubeGameStatus = exports.joinCubeGame = void 0;
+exports.cubeGameSettlementWorker = exports.testResetCubeGame = exports.testCubeGameWithFixedMove = exports.testCubeGameWithOracle = exports.testFillCubeGame = exports.testCubeGameSettlement = exports.ensureCubeGameReady = exports.initializeCubeGame = exports.finalizeCubeGameHistory = exports.getCubeGameHistory = exports.getCurrentCubeGame = exports.getCubeGamePositions = exports.getCubeGameStatus = exports.joinCubeGame = void 0;
 exports.createNewCubeGame = createNewCubeGame;
 exports.processCubeGameSettlements = processCubeGameSettlements;
 const https_1 = require("firebase-functions/v2/https");
@@ -10,7 +10,7 @@ const firebase_config_1 = require("./firebase-config");
 const history_formatter_1 = require("./history-formatter");
 const CUBE_SETTLEMENT_DELAY_MS = 4.5 * 60 * 1000;
 const MAX_CUBE_POSITIONS = 2047;
-const PROJECT_ID = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || process.env.PROJECT_ID || 'pointhub-ab054';
+const PROJECT_ID = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || process.env.PROJECT_ID || 'point-hub-a9db1';
 const CUBE_TASK_REGION = process.env.CUBE_TASK_REGION || 'asia-northeast3';
 const CUBE_SETTLEMENT_FUNCTION_NAME = process.env.CUBE_SETTLEMENT_FUNCTION_NAME || 'cubeGameSettlementWorker';
 const CUBE_TASK_TARGET = process.env.CUBE_TASK_TARGET
@@ -245,36 +245,59 @@ function calculateBinaryTreeRewards() {
     return rewards;
 }
 // 큐브 게임 참여
-exports.joinCubeGame = (0, https_1.onCall)(async (request) => {
+exports.joinCubeGame = (0, https_1.onCall)({ cors: true }, async (request) => {
     var _a, _b, _c, _d, _e, _f;
+    const requestId = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    console.log(`[joinCubeGame][${requestId}] === START ===`);
     if (!request.auth) {
+        console.error(`[joinCubeGame][${requestId}] FAILED: Authentication required`);
         throw new Error('Authentication required');
     }
     const { uid } = request.auth;
     const { position } = request.data;
-    console.log(`[joinCubeGame] uid: ${uid}, position: ${position}, type: ${typeof position}`);
+    console.log(`[joinCubeGame][${requestId}] uid: ${uid}, position: ${position}, type: ${typeof position}, requestData:`, JSON.stringify(request.data));
     if (!position) {
-        console.error('[joinCubeGame] Position is null or undefined');
+        console.error(`[joinCubeGame][${requestId}] FAILED: Position is null or undefined`);
         throw new Error('Position is required');
     }
     if (!isValidCubePosition(position)) {
-        console.error(`[joinCubeGame] Invalid position code: ${position}`);
+        console.error(`[joinCubeGame][${requestId}] FAILED: Invalid position code: ${position}`);
         throw new Error(`Invalid position code: ${position}`);
     }
     try {
         // 현재 활성 큐브 게임 조회
-        const currentGame = await getCurrentCubeGameInternal();
+        console.log(`[joinCubeGame][${requestId}] Step 1: Fetching current game...`);
+        let currentGame = await getCurrentCubeGameInternal();
+        // 게임이 없거나 손상된 경우 자동으로 새 게임 생성
         if (!currentGame) {
-            throw new Error('No active cube game available');
+            console.log(`[joinCubeGame][${requestId}] No valid game found, creating new game...`);
+            await createNewCubeGame();
+            // 새로 생성된 게임 조회
+            currentGame = await getCurrentCubeGameInternal();
+            if (!currentGame) {
+                console.error(`[joinCubeGame][${requestId}] FAILED: Failed to create new game`);
+                throw new Error('Failed to create new cube game. Please try again.');
+            }
+            console.log(`[joinCubeGame][${requestId}] New game created successfully: ${currentGame.gameId}`);
         }
+        console.log(`[joinCubeGame][${requestId}] Step 2: Game found - ${currentGame.gameId}, status: ${currentGame.status}, has positions: ${!!currentGame.positions}, positions count: ${currentGame.positions ? Object.keys(currentGame.positions).length : 0}`);
         if (currentGame.status !== 'waiting') {
+            console.error(`[joinCubeGame][${requestId}] FAILED: Game is not accepting new participants (status: ${currentGame.status})`);
             throw new Error('Game is not accepting new participants');
         }
+        // positions가 없는 경우 방어
+        if (!currentGame.positions || typeof currentGame.positions !== 'object') {
+            console.error(`[joinCubeGame][${requestId}] FAILED: Game positions data is invalid or missing - positions:`, currentGame.positions);
+            throw new Error('Game positions data is invalid');
+        }
+        console.log(`[joinCubeGame][${requestId}] Step 3: Validating position ${position}...`);
         const positionKey = position.toString();
         const selectedPosition = currentGame.positions[positionKey];
         if (!selectedPosition) {
+            console.error(`[joinCubeGame][${requestId}] FAILED: Selected position is invalid - position ${positionKey} not found in game.positions (total positions: ${Object.keys(currentGame.positions).length})`);
             throw new Error('Selected position is invalid');
         }
+        console.log(`[joinCubeGame][${requestId}] Step 4: Checking participant data...`);
         const participants = currentGame.participants || {};
         const userBetMap = getParticipantBetMap(participants[uid]);
         const previousBetCount = Object.keys(userBetMap).length;
@@ -284,6 +307,7 @@ exports.joinCubeGame = (0, https_1.onCall)(async (request) => {
         const previousPosition = ((_b = latestBet === null || latestBet === void 0 ? void 0 : latestBet.position) === null || _b === void 0 ? void 0 : _b.toString()) || null;
         const previousBetId = latestBet === null || latestBet === void 0 ? void 0 : latestBet.betId;
         const seatAlreadyOwned = selectedPosition.isOccupied && selectedPosition.occupiedBy === uid;
+        console.log(`[joinCubeGame][${requestId}] Position status - isOccupied: ${selectedPosition.isOccupied}, occupiedBy: ${selectedPosition.occupiedBy}, seatAlreadyOwned: ${seatAlreadyOwned}`);
         if (seatAlreadyOwned) {
             console.log(`[joinCubeGame] User ${uid} already occupies position ${positionKey}, no change made.`);
             return {
@@ -298,16 +322,19 @@ exports.joinCubeGame = (0, https_1.onCall)(async (request) => {
             };
         }
         if (selectedPosition.isOccupied && selectedPosition.occupiedBy && selectedPosition.occupiedBy !== uid) {
+            console.error(`[joinCubeGame][${requestId}] FAILED: Position is already occupied by ${selectedPosition.occupiedBy}`);
             throw new Error('Position is already occupied');
         }
         // 사용자 정보 및 잔액 확인
-        console.log(`[joinCubeGame] Checking user data for ${uid}`);
+        console.log(`[joinCubeGame][${requestId}] Step 5: Checking user data for ${uid}`);
         const userSnapshot = await firebase_config_1.rtdb.ref(`/users/${uid}`).once('value');
         const userData = userSnapshot.val();
         if (!userData) {
+            console.error(`[joinCubeGame][${requestId}] FAILED: User not found - uid: ${uid}`);
             throw new Error('User not found');
         }
         const betAmount = 20; // 20달러 고정
+        console.log(`[joinCubeGame][${requestId}] Step 6: Checking wallet balance for bet amount ${betAmount}...`);
         // 직접 경로에서 usdt 잔액 확인 (우선)
         let directBalance = 0;
         try {
@@ -330,28 +357,28 @@ exports.joinCubeGame = (0, https_1.onCall)(async (request) => {
             throw new Error(`Insufficient balance. Current: $${finalBalance}, Required: $${betAmount}`);
         }
         // 지갑에서 베팅 금액 차감 (트랜잭션 사용, usdt만 사용)
-        console.log(`[joinCubeGame] Attempting to debit ${betAmount} from wallet`);
+        console.log(`[joinCubeGame][${requestId}] Step 7: Attempting to debit ${betAmount} from wallet...`);
         let transactionSuccess = false;
         let newBalance = 0;
         const debitResult = await firebase_config_1.rtdb.ref(`/users/${uid}/wallet/usdt`).transaction((currentBalance) => {
             const balance = currentBalance !== null && currentBalance !== undefined ? currentBalance : finalBalance;
-            console.log(`[joinCubeGame] Transaction callback - currentBalance from DB: ${currentBalance}, using balance: ${balance}, expected: ${finalBalance}, required: ${betAmount}`);
+            console.log(`[joinCubeGame][${requestId}] Transaction callback - currentBalance from DB: ${currentBalance}, using balance: ${balance}, expected: ${finalBalance}, required: ${betAmount}`);
             if (balance < betAmount) {
-                console.log(`[joinCubeGame] Transaction aborted - insufficient balance: ${balance} < ${betAmount}`);
+                console.log(`[joinCubeGame][${requestId}] Transaction aborted - insufficient balance: ${balance} < ${betAmount}`);
                 transactionSuccess = false;
                 return; // Abort transaction
             }
             newBalance = balance - betAmount;
-            console.log(`[joinCubeGame] Transaction will commit - newBalance: ${newBalance}`);
+            console.log(`[joinCubeGame][${requestId}] Transaction will commit - newBalance: ${newBalance}`);
             transactionSuccess = true;
             return newBalance;
         });
-        console.log(`[joinCubeGame] Transaction result - committed: ${debitResult.committed}, snapshot: ${(_d = debitResult.snapshot) === null || _d === void 0 ? void 0 : _d.val()}`);
+        console.log(`[joinCubeGame][${requestId}] Transaction result - committed: ${debitResult.committed}, snapshot: ${(_d = debitResult.snapshot) === null || _d === void 0 ? void 0 : _d.val()}`);
         if (!debitResult.committed || !transactionSuccess) {
-            console.error(`[joinCubeGame] Failed to debit wallet - committed: ${debitResult.committed}, transactionSuccess: ${transactionSuccess}`);
+            console.error(`[joinCubeGame][${requestId}] FAILED: Failed to debit wallet - committed: ${debitResult.committed}, transactionSuccess: ${transactionSuccess}`);
             throw new Error('Failed to debit wallet');
         }
-        console.log(`[joinCubeGame] Wallet debited successfully - new balance: ${newBalance}`);
+        console.log(`[joinCubeGame][${requestId}] Step 8: Wallet debited successfully - new balance: ${newBalance}`);
         const now = Date.now();
         const participantEmail = ((_e = userData.auth) === null || _e === void 0 ? void 0 : _e.email) || 'unknown';
         const newBetId = `cube_bet_${now}_${Math.random().toString(36).substring(2, 8)}`;
@@ -364,6 +391,7 @@ exports.joinCubeGame = (0, https_1.onCall)(async (request) => {
             betId: newBetId,
             settlementStatus: 'pending'
         };
+        console.log(`[joinCubeGame][${requestId}] Step 9: Creating participant entry - betId: ${newBetId}, position: ${positionKey}`);
         // 원자적 업데이트: 위치 점유 + 참가자 추가 + 상금 업데이트
         const updates = {};
         updates[`/games/cube/${currentGame.gameId}/positions/${positionKey}/isOccupied`] = true;
@@ -375,7 +403,9 @@ exports.joinCubeGame = (0, https_1.onCall)(async (request) => {
             joinedAt: now,
             position: positionKey
         };
+        console.log(`[joinCubeGame][${requestId}] Step 10: Updating database with ${Object.keys(updates).length} fields...`);
         await firebase_config_1.rtdb.ref().update(updates);
+        console.log(`[joinCubeGame][${requestId}] Step 11: Database updated successfully`);
         // 총 상금 업데이트
         await firebase_config_1.rtdb.ref(`/games/cube/${currentGame.gameId}/totalPot`).transaction((currentPot) => {
             return (currentPot || 0) + betAmount;
@@ -421,7 +451,8 @@ exports.joinCubeGame = (0, https_1.onCall)(async (request) => {
             status: currentGame.status,
             settlementAt: (_f = currentGame.settlementAt) !== null && _f !== void 0 ? _f : null
         });
-        console.log(`User ${uid} joined cube game at position ${positionKey}`);
+        console.log(`[joinCubeGame][${requestId}] SUCCESS: User ${uid} joined cube game at position ${positionKey}`);
+        console.log(`[joinCubeGame][${requestId}] === END ===`);
         return {
             success: true,
             gameId: currentGame.gameId,
@@ -440,53 +471,81 @@ exports.joinCubeGame = (0, https_1.onCall)(async (request) => {
         };
     }
     catch (error) {
-        console.error('Join cube game failed:', error);
+        console.error(`[joinCubeGame][${requestId}] ERROR at catch block:`, error);
+        console.error(`[joinCubeGame][${requestId}] Error stack:`, error instanceof Error ? error.stack : 'No stack trace');
+        console.error(`[joinCubeGame][${requestId}] === FAILED END ===`);
         throw new Error(`Failed to join cube game: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 });
 // 큐브 게임 상태 조회
-exports.getCubeGameStatus = (0, https_1.onCall)(async (request) => {
-    var _a, _b, _c;
+exports.getCubeGameStatus = (0, https_1.onCall)({ cors: true }, async (request) => {
+    var _a, _b, _c, _d, _e, _f, _g;
     if (!request.auth) {
         throw new Error('Authentication required');
     }
     const { uid } = request.auth;
     try {
-        const currentGame = await getCurrentCubeGameInternal();
+        let currentGame = await getCurrentCubeGameInternal();
+        // 게임이 없거나 손상된 경우 자동으로 새 게임 생성
         if (!currentGame) {
-            return {
-                success: true,
-                status: 'no_game',
-                nextGameAt: Date.now() + CUBE_SETTLEMENT_DELAY_MS, // test delay
-                message: 'No active game. New game will start soon.'
-            };
+            console.log('[getCubeGameStatus] No valid game found, creating new game...');
+            await createNewCubeGame();
+            currentGame = await getCurrentCubeGameInternal();
+            if (!currentGame) {
+                console.error('[getCubeGameStatus] Failed to create new game');
+                return {
+                    success: true,
+                    status: 'no_game',
+                    nextGameAt: Date.now() + CUBE_SETTLEMENT_DELAY_MS,
+                    message: 'No active game. New game will start soon.'
+                };
+            }
+            console.log(`[getCubeGameStatus] New game created: ${currentGame.gameId}`);
         }
+        const now = Date.now();
         const betList = getParticipantBetList((_a = currentGame.participants) === null || _a === void 0 ? void 0 : _a[uid]);
         const latestBet = getLatestParticipantBet((_b = currentGame.participants) === null || _b === void 0 ? void 0 : _b[uid], (_c = currentGame.participantsLatest) === null || _c === void 0 ? void 0 : _c[uid]);
         const participantCount = countCubeParticipantSeats(currentGame.participants);
         const availablePositions = Math.max(0, MAX_CUBE_POSITIONS - participantCount);
-        const occupiedPositions = Object.entries(currentGame.positions)
-            .filter(([code, pos]) => pos.isOccupied)
-            .map(([code, pos]) => ({
-            code,
-            occupiedBy: pos.occupiedBy,
-            occupiedAt: pos.occupiedAt
-        }));
+        // Unity C# JSON 파싱을 위해 null/undefined만 0으로 변환 (Firebase 값은 그대로 사용)
+        const totalPot = (_d = currentGame.totalPot) !== null && _d !== void 0 ? _d : 0;
+        const betAmount = (_e = currentGame.betAmount) !== null && _e !== void 0 ? _e : 0;
+        // positions가 없을 수 있으므로 방어적으로 처리
+        const occupiedPositions = currentGame.positions
+            ? Object.entries(currentGame.positions)
+                .filter(([code, pos]) => pos.isOccupied)
+                .map(([code, pos]) => ({
+                code,
+                occupiedBy: pos.occupiedBy,
+                occupiedAt: pos.occupiedAt
+            }))
+            : [];
+        // 전체 positions를 배열로 변환 (Unity C#가 배열을 기대함)
+        const allPositions = currentGame.positions
+            ? Object.entries(currentGame.positions).map(([code, pos]) => {
+                var _a;
+                return ({
+                    code,
+                    isOccupied: (_a = pos.isOccupied) !== null && _a !== void 0 ? _a : false,
+                    occupiedBy: pos.occupiedBy || null,
+                    occupiedAt: pos.occupiedAt || 0
+                });
+            })
+            : [];
         // 전체 positions 리스트 (섞인 순서대로) - 저장된 shuffledPositions 사용
-        const shuffledPositions = currentGame.shuffledPositions || Object.keys(currentGame.positions);
-        const now = Date.now();
+        const shuffledPositions = currentGame.shuffledPositions || (currentGame.positions ? Object.keys(currentGame.positions) : []);
         return {
             success: true,
             status: currentGame.status,
             gameId: currentGame.gameId,
             participantCount,
             maxParticipants: MAX_CUBE_POSITIONS,
-            totalPot: currentGame.totalPot,
-            betAmount: currentGame.betAmount,
-            gameStartAt: currentGame.gameStartAt,
-            gameEndAt: currentGame.gameEndAt,
-            timeToStart: currentGame.gameStartAt ? Math.max(0, currentGame.gameStartAt - now) : null,
-            timeToEnd: currentGame.gameEndAt ? Math.max(0, currentGame.gameEndAt - now) : null,
+            totalPot,
+            betAmount,
+            gameStartAt: (_f = currentGame.gameStartAt) !== null && _f !== void 0 ? _f : 0,
+            gameEndAt: (_g = currentGame.gameEndAt) !== null && _g !== void 0 ? _g : 0,
+            timeToStart: currentGame.gameStartAt ? Math.max(0, currentGame.gameStartAt - now) : 0,
+            timeToEnd: currentGame.gameEndAt ? Math.max(0, currentGame.gameEndAt - now) : 0,
             isParticipating: betList.length > 0,
             participantData: betList.length ? {
                 latestBet: latestBet ? mapBetToClientView(latestBet, currentGame) : null,
@@ -496,7 +555,7 @@ exports.getCubeGameStatus = (0, https_1.onCall)(async (request) => {
             occupiedPositions: occupiedPositions.slice(0, 100), // 최근 100개만 반환
             availablePositions,
             shuffledPositions: shuffledPositions, // 전체 positions 리스트 (섞인 순서)
-            allPositions: currentGame.positions // 전체 positions 정보 (code, isOccupied, occupiedBy 등)
+            allPositions: allPositions // 전체 positions 배열 (Unity C# 호환)
         };
     }
     catch (error) {
@@ -569,13 +628,44 @@ async function getCurrentCubeGameInternal() {
         .limitToLast(1)
         .once('value');
     const games = gamesSnapshot.val();
-    if (!games)
+    if (!games) {
+        console.log('[getCurrentCubeGameInternal] No games found, will create new game');
         return null;
+    }
     const gameId = Object.keys(games)[0];
     const game = games[gameId];
     // 게임이 끝났으면 null 반환
-    if (game.status === 'finished')
+    if (game.status === 'finished') {
+        console.log(`[getCurrentCubeGameInternal] Game ${gameId} is finished, will create new game`);
         return null;
+    }
+    // positions 데이터 검증 - 없거나 손상된 경우 무효 처리
+    if (!game.positions || typeof game.positions !== 'object' || Object.keys(game.positions).length === 0) {
+        console.error(`[getCurrentCubeGameInternal] Game ${gameId} has invalid positions data - marking as finished and will create new game`);
+        // 손상된 게임을 finished로 마킹
+        await firebase_config_1.rtdb.ref(`/games/cube/${gameId}`).update({
+            status: 'finished',
+            gameEndAt: Date.now(),
+            resultCalculatedAt: Date.now(),
+            nextGameCreated: false,
+            corruptedData: true
+        });
+        return null;
+    }
+    // positions 개수 검증 (2047개여야 함)
+    const positionsCount = Object.keys(game.positions).length;
+    if (positionsCount !== MAX_CUBE_POSITIONS) {
+        console.error(`[getCurrentCubeGameInternal] Game ${gameId} has incorrect positions count: ${positionsCount} (expected ${MAX_CUBE_POSITIONS}) - marking as finished`);
+        await firebase_config_1.rtdb.ref(`/games/cube/${gameId}`).update({
+            status: 'finished',
+            gameEndAt: Date.now(),
+            resultCalculatedAt: Date.now(),
+            nextGameCreated: false,
+            corruptedData: true
+        });
+        return null;
+    }
+    console.log(`[getCurrentCubeGameInternal] Valid game found: ${gameId}, status: ${game.status}, positions: ${positionsCount}`);
     return { ...game, gameId };
 }
 async function calculateCubeGameResult(gameId, overrideDirection, overrideMoveDistance) {
@@ -1091,17 +1181,73 @@ async function recordCubeLedger(uid, type, amount, operation, meta) {
 // 초기 큐브 게임 생성 (시스템 시작시)
 exports.initializeCubeGame = (0, https_1.onCall)(async (request) => {
     try {
-        // 현재 활성 게임이 있는지 확인
+        console.log('[initializeCubeGame] Checking and initializing cube game...');
+        // 현재 활성 게임이 있는지 확인 (이미 검증 로직 포함)
         const currentGame = await getCurrentCubeGameInternal();
         if (!currentGame) {
+            console.log('[initializeCubeGame] Creating new cube game...');
             await createNewCubeGame();
-            return { success: true, message: 'New cube game created' };
+            const newGame = await getCurrentCubeGameInternal();
+            if (!newGame) {
+                throw new Error('Failed to create new game');
+            }
+            return {
+                success: true,
+                message: 'New cube game created',
+                gameId: newGame.gameId,
+                positionsCount: Object.keys(newGame.positions || {}).length
+            };
         }
-        return { success: true, message: 'Active game already exists', gameId: currentGame.gameId };
+        console.log(`[initializeCubeGame] Valid game already exists: ${currentGame.gameId}`);
+        return {
+            success: true,
+            message: 'Active game already exists',
+            gameId: currentGame.gameId,
+            status: currentGame.status,
+            positionsCount: Object.keys(currentGame.positions || {}).length
+        };
     }
     catch (error) {
-        console.error('Failed to initialize cube game:', error);
+        console.error('[initializeCubeGame] Failed to initialize cube game:', error);
         throw new Error('Failed to initialize cube game');
+    }
+});
+// 사용자 로그인 시 게임 상태 확인 및 초기화
+exports.ensureCubeGameReady = (0, https_1.onCall)({ cors: true }, async (request) => {
+    try {
+        console.log('[ensureCubeGameReady] Ensuring cube game is ready...');
+        let currentGame = await getCurrentCubeGameInternal();
+        if (!currentGame) {
+            console.log('[ensureCubeGameReady] No valid game found, creating new game...');
+            await createNewCubeGame();
+            currentGame = await getCurrentCubeGameInternal();
+            if (!currentGame) {
+                throw new Error('Failed to create game');
+            }
+            console.log(`[ensureCubeGameReady] New game created: ${currentGame.gameId}`);
+            return {
+                success: true,
+                gameCreated: true,
+                gameId: currentGame.gameId,
+                status: currentGame.status,
+                positionsCount: Object.keys(currentGame.positions || {}).length,
+                message: 'New game created and ready'
+            };
+        }
+        console.log(`[ensureCubeGameReady] Game already ready: ${currentGame.gameId}`);
+        return {
+            success: true,
+            gameCreated: false,
+            gameId: currentGame.gameId,
+            status: currentGame.status,
+            positionsCount: Object.keys(currentGame.positions || {}).length,
+            participantCount: countCubeParticipantSeats(currentGame.participants),
+            message: 'Game is ready'
+        };
+    }
+    catch (error) {
+        console.error('[ensureCubeGameReady] Failed:', error);
+        throw new Error(`Failed to ensure game ready: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 });
 // 큐브 게임 정산 및 새 게임 생성 스케줄러 (매 1분마다 실행)

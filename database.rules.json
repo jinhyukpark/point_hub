@@ -2,19 +2,13 @@
   "rules": {
     "users": {
       "$uid": {
-        ".read": "auth != null && auth.uid === $uid",
-        ".write": false,
-        "profile": {
-          ".write": "auth != null && auth.uid === $uid"
-        },
-        "wallet": { 
-          ".write": false 
-        }
+        ".read": true,
+        ".write": false
       }
     },
     "ledger": {
       "$uid": {
-        ".read": "auth != null && auth.uid === $uid",
+        ".read": true,
         ".write": false
       }
     },
@@ -44,6 +38,24 @@
             ".write": true
           }
         }
+      },
+      "matching": {
+        ".read": true,
+        ".write": false,
+        ".indexOn": ["status", "gameType", "createdAt"],
+        "$gameId": {
+          ".read": true,
+          ".write": true
+        }
+      },
+      "cube": {
+        ".read": true,
+        ".write": false,
+        ".indexOn": ["status", "createdAt"],
+        "$gameId": {
+          ".read": true,
+          ".write": true
+        }
       }
     },
     "goldenbell": {
@@ -68,14 +80,14 @@
     },
     "goldenbellHistory": {
       "$uid": {
-        ".read": "auth != null && auth.uid === $uid",
+        ".read": true,
         ".write": false
       }
     },
     "gameHistory": {
       "$uid": {
-        ".read": "auth != null && auth.uid === $uid",
-        ".write": "auth != null && auth.uid === $uid"
+        ".read": true,
+        ".write": true
       }
     },
     "oracle": {

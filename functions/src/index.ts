@@ -1,4 +1,4 @@
-import { onCall } from 'firebase-functions/v2/https';
+import { onCall, onRequest } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { CallableRequest } from 'firebase-functions/v2/https';
 import { HttpsError } from 'firebase-functions/v2/https';
@@ -59,10 +59,11 @@ export {
 // 큐브 게임 함수들
 export {
   joinCubeGame,
-  getCubeGameStatus, 
+  getCubeGameStatus,
   getCubeGamePositions,
   getCurrentCubeGame,
   initializeCubeGame,
+  ensureCubeGameReady,
   getCubeGameHistory,
   finalizeCubeGameHistory,
   processCubeGameSettlements,
@@ -77,33 +78,32 @@ export {
 // Admin tools
 export { setAllUsersVip } from './admin-tools';
 
+// PointHub 연동 함수들
+export {
+  // 회원 확인
+  verifyPointHubMember,
+  getPointHubLinkStatus,
+  // Gpoint
+  getGpointBalance,
+  // GPorder
+  testGporderTransfer,
+  // 스케줄러
+  gpointWithdrawScheduler,
+  gporderTransferScheduler,
+  manualGpointWithdraw,
+  manualGporderTransfer,
+  getBatchStatus,
+} from './pointhub';
+
 // Firebase is initialized in firebase-config.ts
 
 // Types
-interface UserProfile {
-  nickname?: string;
-  country?: string;
-  createdAt: number;
-}
-
-interface UserWallet {
-  usdt: number;
-  ivy: number;
-  pending: number;
-}
-
 interface LedgerEntry {
   type: 'credit' | 'debit';
   amountUsd: number;
   meta: Record<string, any>;
   createdAt: number;
 }
-
-/* interface GameInstance {
-  status: 'open' | 'closed';
-  startAt: number;
-  closedAt: number;
-} */
 
 interface CryptoPrice {
   [symbol: string]: string;
@@ -113,28 +113,34 @@ interface CryptoPrice {
 export const createUserProfile = onCall(async (request: CallableRequest<{uid: string, email?: string}>) => {
   // Allow testing without authentication
   const uid = request.data.uid || (request.auth ? request.auth.uid : 'test-user');
-  const email = request.data.email || (request.auth ? request.auth.token.email : 'test@example.com');
-  
-  const userProfile: UserProfile = {
-    createdAt: Date.now()
-  };
-  
-  // 회원가입 시 기본 100달러 지급
-  const userWallet: UserWallet = {
-    usdt: 100,  // 기본 100달러 지급
-    ivy: 0,
-    pending: 0
-  };
+  const email: string = request.data.email || (request.auth ? request.auth.token.email : 'test@example.com') || 'test@example.com';
 
-  // 사용자 프로필 및 지갑 초기화
+  const now = Date.now();
+
+  // 로컬 에뮬레이터 환경인지 확인
+  const isEmulator = process.env.FUNCTIONS_EMULATOR === 'true' ||
+                     !!process.env.FIREBASE_DATABASE_EMULATOR_HOST;
+
+  // 기본 100 USDT 지급 (로컬 환경에서는 10000)
+  const initialBalance = isEmulator ? 10000 : 100;
+
+  // 사용자 프로필 초기화 (wallet 구조 사용)
   await rtdb.ref(`/users/${uid}`).set({
+    uid,
+    email,
+    emailVerified: (request.auth && request.auth.token.email_verified) || false,
+    displayName: email.split('@')[0], // 이메일 앞부분을 displayName으로 사용
+    balance: initialBalance, // 하위 호환성을 위해 유지
+    wallet: {
+      usdt: initialBalance // 게임 함수들이 사용하는 구조
+    },
     auth: {
-      uid,
-      email,
+      email: email,
       emailVerified: (request.auth && request.auth.token.email_verified) || false
     },
-    profile: userProfile,
-    wallet: userWallet
+    isVip: isEmulator, // 로컬 환경에서는 VIP
+    createdAt: now,
+    updatedAt: now
   });
 
   // 회원가입 보너스 Ledger 기록
@@ -151,8 +157,70 @@ export const createUserProfile = onCall(async (request: CallableRequest<{uid: st
 
   await rtdb.ref(`/ledger/${uid}`).push(ledgerEntry);
 
-  console.log(`User ${uid} (${email}) initialized with $100 welcome bonus`);
-  
+  console.log(`User ${uid} (${email}) initialized with $${initialBalance} welcome bonus`);
+
+  // 로컬 에뮬레이터 환경에서만 게임 데이터 자동 초기화
+  if (isEmulator) {
+    console.log('[DEV MODE] Initializing games for local development...');
+
+    try {
+      // 이미 플랫 구조로 10,000 balance가 설정되어 있음
+      console.log(`[DEV MODE] User ${uid} created with ${initialBalance} test balance`);
+
+      // 2. Golden Bell 게임 생성
+      const { createDailyGoldenBellGames } = require('./goldenbell-game-new');
+      const today = new Date().toISOString().split('T')[0];
+      await createDailyGoldenBellGames(today);
+      console.log('[DEV MODE] Created Golden Bell games');
+
+      // 3. Cube 게임 초기화
+      const cubeRef = rtdb.ref('/games/cube');
+      const cubeSnapshot = await cubeRef.orderByChild('createdAt').limitToLast(1).once('value');
+
+      if (!cubeSnapshot.exists()) {
+        const { createNewCubeGame } = require('./cube-game-new');
+        await createNewCubeGame();
+        console.log('[DEV MODE] Initialized Cube game');
+      }
+
+      // 4. 활성 Golden Bell 게임 생성 (테스트용)
+      const currentTime = Date.now();
+      const activeGameId = `goldenbell_${currentTime}`;
+      await rtdb.ref(`/games/goldenbell/${activeGameId}`).set({
+        gameId: activeGameId,
+        status: 'active',
+        round: 1,
+        currentRound: 1,
+        maxRounds: 10,
+        startAt: currentTime,
+        roundStartAt: currentTime,
+        roundEndAt: currentTime + 120000, // 2분
+        bettingStartAt: currentTime,
+        bettingEndAt: currentTime + 100000, // 100초
+        createdAt: currentTime,
+        currentBetAmount: 100,
+        maxParticipants: 2047,
+        schedule: 'auto_dev_init',
+        totalPot: 0,
+        teamA: {
+          name: 'Red Team',
+          participants: 0,
+          totalBet: 0
+        },
+        teamB: {
+          name: 'Blue Team',
+          participants: 0,
+          totalBet: 0
+        }
+      });
+      console.log('[DEV MODE] Created active Golden Bell game:', activeGameId);
+
+    } catch (error) {
+      console.error('[DEV MODE] Game initialization error:', error);
+      // 게임 초기화 실패해도 사용자 생성은 성공으로 처리
+    }
+  }
+
   return { success: true, uid, email };
 });
 
@@ -624,6 +692,27 @@ export const getOraclePriceData = onCall(async (request: CallableRequest) => {
     const oracleData = oracleSnapshot.val();
 
     if (!oracleData || !oracleData.prices || !oracleData.gameNumbers) {
+      // 에뮬레이터 환경에서는 기본값 반환
+      const isEmulator = process.env.FUNCTIONS_EMULATOR === 'true';
+      if (isEmulator) {
+        console.log('[getOraclePriceData] Emulator mode - returning mock data');
+        return {
+          success: true,
+          data: {
+            timestamp: Date.now(),
+            prices: {
+              BTCUSDT: '97500.25',
+              ETHUSDT: '3250.50',
+              XRPUSDT: '2.35',
+              BNBUSDT: '695.80',
+              SOLUSDT: '185.40',
+              DOGEUSDT: '0.32',
+              TRXUSDT: '0.25'
+            },
+            gameNumbers: { BTC: 5, ETH: 0, XRP: 5, BNB: 0, SOL: 0, DOGE: 2, TRX: 5 }
+          }
+        };
+      }
       throw new HttpsError('unavailable', 'Oracle service unavailable');
     }
 
@@ -749,6 +838,72 @@ export const enhancedInitUserProfile = onCall(async (request: CallableRequest) =
   } catch (error) {
     console.error('Enhanced user initialization failed:', error);
     throw new Error('User initialization failed');
+  }
+});
+
+// 테스트 함수: 사용자 wallet 구조 마이그레이션
+export const testMigrateUserWallets = onCall(async (request: CallableRequest) => {
+  if (!request.auth) {
+    throw new Error('Authentication required');
+  }
+
+  try {
+    console.log('[testMigrateUserWallets] Starting user wallet migration...');
+
+    const usersSnapshot = await rtdb.ref('/users').once('value');
+    if (!usersSnapshot.exists()) {
+      return {
+        success: true,
+        message: 'No users found',
+        migrated: 0
+      };
+    }
+
+    const users = usersSnapshot.val();
+    const updates: Record<string, any> = {};
+    let migratedCount = 0;
+
+    for (const [uid, userData] of Object.entries(users) as [string, any][]) {
+      // wallet/usdt가 없거나 0인 경우에만 마이그레이션
+      const currentWalletUsdt = userData.wallet?.usdt || 0;
+      const balance = userData.balance || 0;
+
+      if (currentWalletUsdt === 0 && balance > 0) {
+        // balance 값을 wallet/usdt로 복사
+        updates[`/users/${uid}/wallet/usdt`] = balance;
+        console.log(`[testMigrateUserWallets] Migrating user ${uid}: balance ${balance} -> wallet/usdt`);
+        migratedCount++;
+      } else if (!userData.wallet) {
+        // wallet 구조 자체가 없으면 생성 (10000 USDT 기본값)
+        updates[`/users/${uid}/wallet/usdt`] = 10000;
+        updates[`/users/${uid}/balance`] = 10000;
+        console.log(`[testMigrateUserWallets] Creating wallet for user ${uid}: 10000 USDT`);
+        migratedCount++;
+      }
+
+      // auth 구조도 없으면 추가
+      if (!userData.auth && userData.email) {
+        updates[`/users/${uid}/auth/email`] = userData.email;
+        updates[`/users/${uid}/auth/emailVerified`] = userData.emailVerified || false;
+      }
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await rtdb.ref().update(updates);
+    }
+
+    console.log(`[testMigrateUserWallets] Migration complete: ${migratedCount} users migrated`);
+
+    return {
+      success: true,
+      message: `User wallet migration completed`,
+      migrated: migratedCount,
+      totalUsers: Object.keys(users).length
+    };
+
+  } catch (error) {
+    console.error('[testMigrateUserWallets] Migration failed:', error);
+    throw new Error(`Failed to migrate user wallets: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 });
 
@@ -1005,5 +1160,56 @@ export const testResetAllData = onCall(async (request: CallableRequest) => {
   } catch (error) {
     console.error('[testResetAllData] Full data reset failed:', error);
     throw new Error(`Failed to reset all data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+});
+
+// 테스트 함수: 매칭 게임 정산 수동 트리거
+export const testSettleMatchingGames = onCall(async (request: CallableRequest) => {
+  if (!request.auth) {
+    throw new Error('Authentication required');
+  }
+
+  try {
+    console.log('[testSettleMatchingGames] Manually triggering settlement...');
+    const { processMatchingGameSettlements } = await import('./matching-game-new');
+    await processMatchingGameSettlements();
+
+    return {
+      success: true,
+      message: 'Matching game settlement completed successfully'
+    };
+  } catch (error) {
+    console.error('[testSettleMatchingGames] Settlement failed:', error);
+    throw new Error(`Failed to settle matching games: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+});
+
+// HTTP endpoint: 매칭 게임 정산 (스크립트에서 호출용, 인증 불필요 - 로컬 전용)
+export const settleMatchingGamesHttp = onRequest(async (req, res) => {
+  // CORS 헤더 추가
+  res.set('Access-Control-Allow-Origin', '*');
+
+  if (req.method === 'OPTIONS') {
+    res.set('Access-Control-Allow-Methods', 'GET, POST');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    res.status(204).send('');
+    return;
+  }
+
+  try {
+    console.log('[settleMatchingGamesHttp] HTTP endpoint triggered');
+    const { processMatchingGameSettlements } = await import('./matching-game-new');
+    await processMatchingGameSettlements();
+
+    res.status(200).json({
+      success: true,
+      message: 'Matching game settlement completed successfully'
+    });
+  } catch (error) {
+    console.error('[settleMatchingGamesHttp] Settlement failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 });

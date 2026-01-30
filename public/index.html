@@ -46,18 +46,22 @@
             height: 100vh;
             z-index: 1;
             background: #231F20;
-            pointer-events: none; /* Disabled by default to allow auth interaction */
+            pointer-events: none !important; /* Disabled by default to allow auth interaction */
+            display: none !important;
         }
-        
+
         /* Hide Unity when auth is visible */
         body:not(.authenticated) #unity-canvas {
-            visibility: hidden;
+            visibility: hidden !important;
+            display: none !important;
+            pointer-events: none !important;
         }
-        
+
         /* Enable Unity interactions when authenticated */
         body.authenticated #unity-canvas {
-            pointer-events: auto;
-            visibility: visible;
+            pointer-events: auto !important;
+            visibility: visible !important;
+            display: block !important;
         }
 
         /* Background for Auth Pages */
@@ -115,12 +119,11 @@
 
         /* Login/Signup Popup Styles */
         .auth-popup {
-            /* 9-slice border-image: 상 우 하 좌 순서로 slice 값 지정 */
-            border-image-source: url('./img/login_popup_bg.png');
-            border-image-slice: 50 50 50 50 fill;
+            border-image: url('./img/login_popup_bg.png') 50 fill;
+            border-image-slice: 50 fill;
             border-image-width: calc(50px * var(--scale-factor));
             border-image-outset: 0;
-            border-image-repeat: stretch stretch;
+            border-image-repeat: stretch;
             background: transparent;
             width: var(--popup-width);
             height: var(--popup-height);
@@ -153,6 +156,7 @@
             margin-bottom: calc(40px * var(--scale-factor));
             width: var(--input-width);
             height: var(--input-height);
+            z-index: 1001;
         }
 
         .input-container.signup {
@@ -175,28 +179,31 @@
         .input-field {
             width: var(--input-width);
             height: var(--input-height);
-            /* 9-slice border-image: 상 우 하 좌 순서로 slice 값 지정 */
-            border-image-source: url('./img/UI_Email.png');
-            border-image-slice: 25 25 25 25 fill;
+            border-image: url('./img/UI_Email.png') 25 fill;
+            border-image-slice: 25 fill;
             border-image-width: calc(25px * var(--scale-factor));
             border-image-outset: 0;
-            border-image-repeat: stretch stretch;
+            border-image-repeat: stretch;
             background: transparent;
-            color: #ffffff;
+            color: #ffffff !important;
             font-size: calc(44px * var(--scale-factor));
             padding: calc(80px * var(--scale-factor)) calc(40px * var(--scale-factor)) calc(40px * var(--scale-factor)) calc(40px * var(--scale-factor));
             outline: none;
             font-family: 'Merriweather', serif;
             transition: filter 0.3s ease;
             box-sizing: border-box;
+            position: relative;
+            z-index: 1002;
+            cursor: text;
+            pointer-events: auto !important;
         }
 
         .input-field.password {
-            border-image-source: url('./img/UI_Password.png');
-            border-image-slice: 25 25 25 25 fill;
+            border-image: url('./img/UI_Password.png') 25 fill;
+            border-image-slice: 25 fill;
             border-image-width: calc(25px * var(--scale-factor));
             border-image-outset: 0;
-            border-image-repeat: stretch stretch;
+            border-image-repeat: stretch;
         }
 
         .input-field:focus {
@@ -218,13 +225,19 @@
             transition: background-color 5000s ease-in-out 0s;
         }
 
+        /* Prevent autofill dropdown styling issues */
+        input:-internal-autofill-selected {
+            background-color: transparent !important;
+            background-image: none !important;
+            color: #ffffff !important;
+        }
+
         .auth-button {
-            /* 9-slice border-image: 상 우 하 좌 순서로 slice 값 지정 */
-            border-image-source: url('./img/login_button.png');
-            border-image-slice: 30 30 30 30 fill;
+            border-image: url('./img/login_button.png') 30 fill;
+            border-image-slice: 30 fill;
             border-image-width: calc(30px * var(--scale-factor));
             border-image-outset: 0;
-            border-image-repeat: stretch stretch;
+            border-image-repeat: stretch;
             background: transparent;
             width: var(--button-width);
             height: var(--button-height);
@@ -240,11 +253,11 @@
 
         .auth-button.signup {
             margin-top: calc(30px * var(--scale-factor));
-            border-image-source: url('./img/signup_button.png');
-            border-image-slice: 30 30 30 30 fill;
+            border-image: url('./img/signup_button.png') 30 fill;
+            border-image-slice: 30 fill;
             border-image-width: calc(30px * var(--scale-factor));
             border-image-outset: 0;
-            border-image-repeat: stretch stretch;
+            border-image-repeat: stretch;
             background: transparent;
         }
 
@@ -421,7 +434,7 @@
             -webkit-box-sizing: border-box !important;
             -moz-box-sizing: border-box !important;
         }
-        
+
         .samsung-internet .input-field.password {
             background: url('./img/UI_Password.png') no-repeat center center !important;
             background-size: 100% 100% !important;
@@ -441,7 +454,7 @@
             background: url('./img/login_button.png') no-repeat center center !important;
             background-size: 100% 100% !important;
         }
-        
+
         .samsung-internet .auth-button.signup {
             background: url('./img/signup_button.png') no-repeat center center !important;
             background-size: 100% 100% !important;
@@ -458,53 +471,38 @@
             font-size: calc(14px * var(--scale-factor)) !important;
         }
         
-        /* Chrome specific enhancements */
+        /* Chrome specific enhancements - background-image 방식 (border-image 흐림 방지) */
         .chrome-detected .auth-popup {
-            border-image-source: url('./img/login_popup_bg.png');
-            border-image-slice: 50 50 50 50 fill;
-            border-image-width: calc(50px * var(--scale-factor));
-            border-image-outset: 0;
-            border-image-repeat: stretch stretch;
-            background: transparent;
+            border: none !important;
+            background: url('./img/login_popup_bg.png') no-repeat center center !important;
+            background-size: 100% 100% !important;
         }
-        
+
         .chrome-detected .input-field {
-            border-image-source: url('./img/UI_Email.png');
-            border-image-slice: 25 25 25 25 fill;
-            border-image-width: calc(25px * var(--scale-factor));
-            border-image-outset: 0;
-            border-image-repeat: stretch stretch;
-            background: transparent;
+            border: none !important;
+            background: url('./img/UI_Email.png') no-repeat center center !important;
+            background-size: 100% 100% !important;
         }
-        
+
         .chrome-detected .input-field.password {
-            border-image-source: url('./img/UI_Password.png');
-            border-image-slice: 25 25 25 25 fill;
-            border-image-width: calc(25px * var(--scale-factor));
-            border-image-outset: 0;
-            border-image-repeat: stretch stretch;
-            background: transparent;
+            border: none !important;
+            background: url('./img/UI_Password.png') no-repeat center center !important;
+            background-size: 100% 100% !important;
         }
-        
+
         .chrome-detected .auth-button {
-            border-image-source: url('./img/login_button.png');
-            border-image-slice: 30 30 30 30 fill;
-            border-image-width: calc(30px * var(--scale-factor));
-            border-image-outset: 0;
-            border-image-repeat: stretch stretch;
-            background: transparent !important;
+            border: none !important;
+            background: url('./img/login_button.png') no-repeat center center !important;
+            background-size: 100% 100% !important;
             min-width: 255px;
             min-height: 60px;
             font-size: calc(32px * var(--scale-factor));
         }
-        
+
         .chrome-detected .auth-button.signup {
-            border-image-source: url('./img/signup_button.png');
-            border-image-slice: 30 30 30 30 fill;
-            border-image-width: calc(30px * var(--scale-factor));
-            border-image-outset: 0;
-            border-image-repeat: stretch stretch;
-            background: transparent !important;
+            border: none !important;
+            background: url('./img/signup_button.png') no-repeat center center !important;
+            background-size: 100% 100% !important;
         }
         
         /* Fallback for browsers that don't support border-image */
@@ -542,13 +540,15 @@
         const auth = getAuth(app);
         const database = getDatabase(app);
 
-        // 에뮬레이터 연결 (로컬 환경인 경우)
-        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        // 에뮬레이터 연결 (firebase-config.js에서 설정된 환경 사용)
+        if (window.useEmulators && window.emulatorConfig) {
             connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
             console.log('✅ Firebase Auth connected to emulator (127.0.0.1:9099)');
 
-            connectDatabaseEmulator(database, "127.0.0.1", 9000);
-            console.log('✅ Firebase Database connected to emulator (127.0.0.1:9000)');
+            // Database는 firebase-config.js에서 이미 emulator URL로 설정됨
+            console.log('✅ Firebase Database using emulator URL from config (127.0.0.1:9000)');
+        } else {
+            console.log('✅ Using Production Firebase services');
         }
 
         // Functions 초기화 시도 (에러 처리 포함)
@@ -556,8 +556,8 @@
         try {
             functions = getFunctions(app);
 
-            // 에뮬레이터 연결 (로컬 환경인 경우)
-            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            // 에뮬레이터 연결 (firebase-config.js에서 설정된 환경 사용)
+            if (window.useEmulators && window.emulatorConfig) {
                 connectFunctionsEmulator(functions, "127.0.0.1", 5001);
                 console.log('✅ Firebase Functions connected to emulator (127.0.0.1:5001)');
             }
@@ -576,6 +576,9 @@
         window.firebaseOnChildAdded = onChildAdded;
         window.firebaseOnChildChanged = onChildChanged;
         window.firebaseOff = off;
+        window.firebaseGet = get;
+        window.firebaseSet = set;
+        window.firebaseUpdate = update;
         // Helper: onValue를 Promise로 감싸서 한 번만 읽기
         window.firebaseOnce = (dbRef) => {
             return new Promise((resolve, reject) => {
@@ -596,19 +599,9 @@
         window.createUserWithEmailAndPassword = createUserWithEmailAndPassword;
         window.signOut = signOut;
         window.onAuthStateChanged = onAuthStateChanged;
-        
-        // 로그아웃 감지 및 페이지 새로고침
-        let previousAuthState = null;
-        onAuthStateChanged(auth, (user) => {
-            // 이전 상태가 로그인 상태였고 현재는 로그아웃 상태인 경우
-            if (previousAuthState !== null && previousAuthState && !user) {
-                console.log('🔄 로그아웃 감지됨, 페이지 새로고침...');
-                setTimeout(() => {
-                    window.location.reload();
-                }, 100);
-            }
-            previousAuthState = !!user;
-        });
+
+        // Auth state is handled by app.js (PointHubApp.setupAuthStateListener)
+        console.log('✅ Firebase initialized - auth state will be handled by app.js');
         
         // 화면 방향 고정 (세로 모드 유지)
         function lockOrientation() {
@@ -680,15 +673,13 @@
             }
         }));
         
-        // app.js를 동적으로 로드 (약간의 지연 후)
-        setTimeout(() => {
-            const appScript = document.createElement('script');
-            appScript.src = 'app.js';
-            appScript.onload = () => {
-                console.log('✅ app.js loaded after Firebase initialization');
-            };
-            document.head.appendChild(appScript);
-        }, 100);
+        // app.js를 즉시 로드 (캐시 방지용 버전 파라미터 추가)
+        const appScript = document.createElement('script');
+        appScript.src = `app.js?v=${Date.now()}`;
+        appScript.onload = () => {
+            console.log('✅ app.js loaded after Firebase initialization');
+        };
+        document.head.appendChild(appScript);
     </script>
 </head>
 <body>
@@ -711,12 +702,12 @@
             
             <div class="input-container">
                 <label class="input-label" for="login-email">E-MAIL</label>
-                <input type="email" id="login-email" class="input-field" required autocomplete="off" spellcheck="false">
+                <input type="email" id="login-email" class="input-field" required autocomplete="new-email" spellcheck="false" autocorrect="off" autocapitalize="off">
             </div>
-            
+
             <div class="input-container">
                 <label class="input-label" for="login-password">PASSWORD</label>
-                <input type="password" id="login-password" class="input-field password" required autocomplete="off" spellcheck="false">
+                <input type="password" id="login-password" class="input-field password" required autocomplete="new-password" spellcheck="false" autocorrect="off" autocapitalize="off">
             </div>
             
             <button type="button" id="login-btn" class="auth-button"></button>
@@ -733,17 +724,17 @@
             
             <div class="input-container signup">
                 <label class="input-label" for="signup-email">E-MAIL</label>
-                <input type="email" id="signup-email" class="input-field" required>
+                <input type="email" id="signup-email" class="input-field" required autocomplete="new-email" spellcheck="false" autocorrect="off" autocapitalize="off">
             </div>
-            
+
             <div class="input-container signup">
                 <label class="input-label" for="signup-password">PASSWORD</label>
-                <input type="password" id="signup-password" class="input-field password" required>
+                <input type="password" id="signup-password" class="input-field password" required autocomplete="new-password" spellcheck="false" autocorrect="off" autocapitalize="off">
             </div>
-            
+
             <div class="input-container signup">
                 <label class="input-label" for="signup-confirm">CONFIRM PASSWORD</label>
-                <input type="password" id="signup-confirm" class="input-field password" required>
+                <input type="password" id="signup-confirm" class="input-field password" required autocomplete="new-password" spellcheck="false" autocorrect="off" autocapitalize="off">
             </div>
             
             <button type="button" id="signup-btn" class="auth-button signup"></button>

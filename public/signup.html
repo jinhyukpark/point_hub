@@ -84,6 +84,7 @@
             margin-bottom: calc(30px * var(--scale-factor));
             width: var(--input-width);
             height: var(--input-height);
+            z-index: 5;
         }
 
         .input-label {
@@ -102,34 +103,30 @@
         .input-field {
             width: var(--input-width);
             height: var(--input-height);
-            border-image: url('./img/UI_Email.png') 25 fill;
-            border-image-slice: 25 fill;
-            border-image-width: calc(25px * var(--scale-factor));
-            border-image-outset: 0;
-            border-image-repeat: stretch;
-            background: transparent;
-            color: #ffffff;
+            /* CSS border instead of border-image for better compatibility */
+            border: calc(3px * var(--scale-factor)) solid rgba(6, 182, 212, 0.6);
+            border-radius: calc(15px * var(--scale-factor));
+            background: rgba(20, 30, 50, 0.8) !important;
+            color: #ffffff !important;
             font-size: calc(44px * var(--scale-factor));
             padding: calc(80px * var(--scale-factor)) calc(40px * var(--scale-factor)) calc(40px * var(--scale-factor)) calc(40px * var(--scale-factor));
             outline: none;
             font-family: 'Merriweather', serif;
-            transition: filter 0.3s ease;
+            transition: filter 0.3s ease, border-color 0.3s ease;
+            position: relative;
+            z-index: 100;
+            cursor: text;
+            pointer-events: auto !important;
+            box-shadow: 0 0 calc(10px * var(--scale-factor)) rgba(6, 182, 212, 0.2);
         }
 
         .input-field.password {
-            border-image: url('./img/UI_Password.png') 25 fill;
-            border-image-slice: 25 fill;
-            border-image-width: calc(25px * var(--scale-factor));
-            border-image-outset: 0;
-            border-image-repeat: stretch;
+            /* Same styling for password fields */
         }
 
         .input-field:focus {
-            filter: brightness(1.2) drop-shadow(0 0 calc(10px * var(--scale-factor)) rgba(139, 92, 246, 0.5));
-        }
-
-        .input-field.password:focus {
-            filter: brightness(1.2) drop-shadow(0 0 calc(10px * var(--scale-factor)) rgba(6, 182, 212, 0.5));
+            border-color: rgba(6, 182, 212, 1);
+            box-shadow: 0 0 calc(15px * var(--scale-factor)) rgba(6, 182, 212, 0.5);
         }
 
         /* 브라우저 자동완성 배경 제거 */
@@ -137,9 +134,9 @@
         .input-field:-webkit-autofill:hover,
         .input-field:-webkit-autofill:focus,
         .input-field:-webkit-autofill:active {
-            -webkit-box-shadow: 0 0 0 1000px transparent inset !important;
+            -webkit-box-shadow: 0 0 0 1000px rgba(20, 30, 50, 0.95) inset !important;
             -webkit-text-fill-color: #ffffff !important;
-            background: transparent !important;
+            border: calc(3px * var(--scale-factor)) solid rgba(6, 182, 212, 0.6) !important;
             transition: background-color 5000s ease-in-out 0s;
         }
 
@@ -234,18 +231,29 @@
     <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js';
-        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js';
-        
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, connectAuthEmulator } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js';
+        import { getFunctions, connectFunctionsEmulator, httpsCallable } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-functions.js';
+
         // Firebase configuration (loaded from firebase-config.js)
         const firebaseConfig = window.firebaseConfig;
-        
+
         // Initialize Firebase
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
-        
+        const functions = getFunctions(app);
+
+        // Connect to emulators in local environment
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+            connectFunctionsEmulator(functions, "127.0.0.1", 5001);
+            console.log('✅ Firebase Auth & Functions connected to emulator');
+        }
+
         window.firebaseAuth = auth;
+        window.firebaseFunctions = functions;
         window.createUserWithEmailAndPassword = createUserWithEmailAndPassword;
         window.signInWithEmailAndPassword = signInWithEmailAndPassword;
+        window.httpsCallable = httpsCallable;
     </script>
 </head>
 <body>
@@ -260,17 +268,17 @@
             
             <div class="input-container">
                 <label class="input-label" for="email">E-MAIL</label>
-                <input type="email" id="email" class="input-field" required>
+                <input type="email" id="email" class="input-field" autocomplete="off" required>
             </div>
-            
+
             <div class="input-container">
                 <label class="input-label" for="password">PASSWORD</label>
-                <input type="password" id="password" class="input-field password" required>
+                <input type="password" id="password" class="input-field password" autocomplete="new-password" required>
             </div>
-            
+
             <div class="input-container">
                 <label class="input-label" for="confirmPassword">CONFIRM PASSWORD</label>
-                <input type="password" id="confirmPassword" class="input-field password" required>
+                <input type="password" id="confirmPassword" class="input-field password" autocomplete="new-password" required>
             </div>
             
             <button type="button" id="signupBtn" class="signup-button"></button>
@@ -293,6 +301,21 @@
             const errorMessage = document.getElementById('errorMessage');
             const successMessage = document.getElementById('successMessage');
             const loading = document.getElementById('loading');
+
+            // Fix autofill blocking input - remove readonly after page load
+            emailInput.removeAttribute('readonly');
+            passwordInput.removeAttribute('readonly');
+            confirmPasswordInput.removeAttribute('readonly');
+
+            // Ensure inputs are focusable
+            setTimeout(() => {
+                emailInput.style.pointerEvents = 'auto';
+                passwordInput.style.pointerEvents = 'auto';
+                confirmPasswordInput.style.pointerEvents = 'auto';
+                emailInput.removeAttribute('readonly');
+                passwordInput.removeAttribute('readonly');
+                confirmPasswordInput.removeAttribute('readonly');
+            }, 100);
 
             // Handle signup button click
             signupBtn.addEventListener('click', handleSignup);
@@ -336,16 +359,30 @@
 
                 try {
                     showLoading(true);
-                    
+
                     // Create user account with Firebase
                     const userCredential = await window.createUserWithEmailAndPassword(window.firebaseAuth, email, password);
                     const user = userCredential.user;
-                    
-                    console.log('Account created successfully:', user.uid);
-                    
+
+                    console.log('✅ Account created successfully:', user.uid);
+
+                    // Create user profile in database
+                    try {
+                        console.log('Creating user profile...');
+                        const createUserProfile = window.httpsCallable(window.firebaseFunctions, 'createUserProfile');
+                        const profileResult = await createUserProfile({
+                            uid: user.uid,
+                            email: user.email
+                        });
+                        console.log('✅ User profile created:', profileResult.data);
+                    } catch (profileError) {
+                        console.error('⚠️ Profile creation error (non-critical):', profileError);
+                        // Continue even if profile creation fails - it will be created on login
+                    }
+
                     // Show success message
                     showSuccess('Account created successfully! Redirecting to login...');
-                    
+
                     // Redirect to login page after 2 seconds
                     setTimeout(() => {
                         window.location.href = '/login.html';

@@ -68,7 +68,7 @@ function generateFallbackOracleData() {
     };
 }
 // 매칭 게임 참여
-exports.joinMatchingGame = (0, https_1.onCall)(async (request) => {
+exports.joinMatchingGame = (0, https_1.onCall)({ cors: true }, async (request) => {
     var _a, _b, _c;
     if (!request.auth) {
         throw new Error('Authentication required');
@@ -201,7 +201,7 @@ exports.joinMatchingGame = (0, https_1.onCall)(async (request) => {
         const betId = `bet_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
         const participant = {
             uid,
-            email: ((_c = userData.auth) === null || _c === void 0 ? void 0 : _c.email) || 'unknown',
+            email: userData.email || ((_c = userData.auth) === null || _c === void 0 ? void 0 : _c.email) || 'unknown',
             betId,
             coin: 'ALL',
             number: 0,
@@ -642,10 +642,19 @@ async function calculateMatchingGameResults(gameId, overrideWinningNumbers) {
             calculatedAt: Date.now()
         };
         await firebase_config_1.rtdb.ref(`/games/matching_summary/${gameId}`).set(summary);
-        console.log(`Matching game ${gameId} (${game.gameType}) completed. Winners across ${gameResults.length} ranks.`);
+        // 정산 완료 상태로 변경
+        await firebase_config_1.rtdb.ref(`/games/matching/${gameId}/status`).set('settled');
+        console.log(`Matching game ${gameId} (${game.gameType}) completed and settled. Winners across ${gameResults.length} ranks.`);
     }
     catch (error) {
         console.error(`Failed to calculate matching game results for ${gameId}:`, error);
+        // 오류 발생 시에도 상태 업데이트 (재시도 방지)
+        try {
+            await firebase_config_1.rtdb.ref(`/games/matching/${gameId}/status`).set('error');
+        }
+        catch (updateError) {
+            console.error(`Failed to update error status for ${gameId}:`, updateError);
+        }
     }
 }
 // 코인별 개별 베팅 시스템에서는 단순히 숫자 일치 여부만 확인

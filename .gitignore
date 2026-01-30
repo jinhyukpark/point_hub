@@ -72,3 +72,7 @@ prd
 prd_docs
 Unity-Bridge.cs
 unity-client-example.cs
+
+# Test and admin files with hardcoded credentials
+public/admin-wallet-fix.html
+public/test-*.html
